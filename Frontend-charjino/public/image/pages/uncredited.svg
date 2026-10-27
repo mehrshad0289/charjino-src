@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="charge" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4f1230"/>
+      <stop offset="1" stop-color="#b42d6c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#charge)"/>
+  <circle cx="1080" cy="180" r="160" fill="#ffffff" fill-opacity="0.1"/>
+  <text x="80" y="300" fill="#ffffff" font-family="Tahoma, sans-serif" font-size="56" font-weight="700">~1/'.* 4/G 4'1˜ F4/</text>
+  <text x="80" y="380" fill="#fde8f1" font-family="Tahoma, sans-serif" font-size="28">4E'1G 3A'14 1' (1'Ì ~4*Ì('FÌ (A13*</text>
+</svg>

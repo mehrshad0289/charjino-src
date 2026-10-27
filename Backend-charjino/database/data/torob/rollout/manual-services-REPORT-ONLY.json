@@ -1,0 +1,9 @@
+{
+  "group": "manual-services",
+  "enable_allowed": false,
+  "product_ids": [1513, 56455],
+  "handles": ["manual-call-of-duty-mobile", "manual-roblox"],
+  "count": 2,
+  "listable_in_torob_feed": 0,
+  "note": "هرگز فعال نشود. از فید ترب خارج‌اند (handle manual-* / family MANUAL). visible_products=0."
+}

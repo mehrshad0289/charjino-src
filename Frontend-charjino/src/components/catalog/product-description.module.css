@@ -1,0 +1,118 @@
+.root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.clip {
+  position: relative;
+  width: 100%;
+}
+
+.panel {
+  overflow: hidden;
+  max-height: none;
+  transition: max-height 0.35s var(--ease-standard, ease);
+}
+
+.clamp .panel {
+  max-height: calc(3 * 1.75rem);
+}
+
+.clamp.open .panel {
+  max-height: var(--desc-full, 80rem);
+}
+
+.body {
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.75rem;
+  overflow-wrap: anywhere;
+}
+
+.body :is(p, ul, ol, h2, h3) {
+  margin: 0 0 0.5rem;
+}
+
+.body :is(p, ul, ol, h2, h3):last-child {
+  margin-bottom: 0;
+}
+
+.body a {
+  color: var(--color-primary-600);
+  text-decoration: none;
+}
+
+.body a:hover {
+  text-decoration: underline;
+}
+
+.body img {
+  max-height: 12rem;
+  width: 100%;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.fade {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2.5rem;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--color-surface), transparent);
+  opacity: 0;
+  transition: opacity 0.25s var(--ease-standard, ease);
+}
+
+.clamp:not(.open) .fade {
+  opacity: 1;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary-600);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  text-decoration: underline;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.chev {
+  display: grid;
+  transition: transform 0.3s var(--ease-standard, ease);
+}
+
+.open .chev {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .fade,
+  .chev {
+    transition: none;
+  }
+}

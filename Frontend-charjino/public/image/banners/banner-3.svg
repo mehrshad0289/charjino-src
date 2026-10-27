@@ -1,0 +1,6 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520">
+  <defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#113F8C"/><stop offset="1" stop-color="#B42D6C"/></linearGradient></defs>
+  <rect width="1280" height="520" rx="24" fill="url(#g)"/>
+  <text x="80" y="230" fill="white" font-family="Tahoma" font-size="48" font-weight="700">جدول برترین‌ها</text>
+  <text x="80" y="290" fill="white" font-family="Tahoma" font-size="22">افتخار از تلاش، نه از نتیجه مالی</text>
+</svg>

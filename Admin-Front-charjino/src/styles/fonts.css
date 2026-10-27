@@ -1,0 +1,63 @@
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+  src: url('/fonts/Yekan Bakh EN 01 Hairline.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('/fonts/YekanBakh_Light.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Yekan Bakh.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Medium.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Medium.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Heavy.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Fat.ttf') format('truetype');
+}

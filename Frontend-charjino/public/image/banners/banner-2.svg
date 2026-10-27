@@ -1,0 +1,6 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520">
+  <defs><linearGradient id="g" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a1f00"/><stop offset="1" stop-color="#0563FC"/></linearGradient></defs>
+  <rect width="1280" height="520" rx="24" fill="url(#g)"/>
+  <text x="80" y="230" fill="white" font-family="Tahoma" font-size="48" font-weight="700">فروش ویژه امروز</text>
+  <text x="80" y="290" fill="white" font-family="Tahoma" font-size="22">بسته‌های منتخب با موجودی محدود</text>
+</svg>

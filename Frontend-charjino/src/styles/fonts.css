@@ -1,0 +1,56 @@
+@font-face {
+  font-family: 'Yekan Bakh Fallback';
+  src: local('Tahoma');
+  size-adjust: 103%;
+  ascent-override: 95%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('/fonts/YekanBakh-Bold.woff2') format('woff2');
+}

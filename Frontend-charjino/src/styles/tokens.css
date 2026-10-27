@@ -1,0 +1,97 @@
+html {
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 700;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-button: 8px;
+  --radius-input: 8px;
+
+  --btn-height-lg: 51px;
+  --btn-height-md: 45px;
+  --btn-height-sm: 32px;
+  --input-height: 46px;
+  --field-width: 100%;
+  --field-gap: 8px;
+  --input-radius: 8px;
+  --input-pad-y: 8px;
+  --input-pad-x: 12px;
+  --label-size: 12px;
+  --input-text-size: 12px;
+  --hint-size: 12px;
+  --icon-size: 24px;
+
+  --input-bg: #e8eef5;
+  --input-bg-disabled: #e2e8f0;
+  --input-border: #d5dee8;
+  --input-border-hover: #94a3b8;
+  --input-border-error: #df0c0c;
+  --input-label: #122033;
+  --input-placeholder: #64748b;
+  --input-placeholder-hover: #475569;
+  --input-hint: #5c6b7a;
+  --input-border-disabled: #e2e8f0;
+  --input-disabled-text: #94a3b8;
+  --page-pad: 16px;
+  --screen-mobile-w: 412px;
+  --duration-fast: 150ms;
+  --shadow-card: 0px 0px 6px 0px #0000001f;
+  --shadow-modal: 0px 2px 8px 0px #0000000a, 0px 12px 32px 0px #00000014;
+  --color-accent: var(--color-primary-600);
+  --glass-fill: #ffffffeb;
+  --glass-stroke: #d5dee880;
+  --glass-blur: 12px;
+  --radius-glass: 12px;
+
+  --btn-primary-bg: #0563fc;
+  --btn-primary-bg-hover: rgb(5 99 252 / 0.75);
+  --btn-primary-bg-active: rgb(5 99 252 / 0.75);
+  --btn-primary-bg-disabled: #e2e8f0;
+  --btn-primary-text: #ffffff;
+  --btn-primary-text-disabled: #94a3b8;
+
+  --btn-secondary-bg: transparent;
+  --btn-secondary-bg-hover: rgb(18 32 51 / 0.05);
+  --btn-secondary-text: #122033;
+
+  --chip-bg: #eef3f8;
+  --chip-bg-hover: rgb(238 243 248 / 0.75);
+  --chip-bg-selected: #0563fc;
+  --chip-text: #122033;
+  --chip-text-selected: #ffffff;
+}
+
+html[data-theme='dark'] {
+  --input-bg: #535353;
+  --input-bg-disabled: #343434;
+  --input-border: #535353;
+  --input-border-hover: #6b6b6b;
+  --input-border-error: #fa9e9e;
+  --input-label: #ffffff;
+  --input-placeholder: #ffffff;
+  --input-placeholder-hover: #ffffff;
+  --input-hint: #c4c4c4;
+  --input-border-disabled: #343434;
+  --input-disabled-text: #9a9a9a;
+  --glass-fill: #141414cf;
+  --glass-stroke: #53535380;
+  --btn-primary-bg-disabled: #343434;
+  --btn-primary-text-disabled: #9a9a9a;
+  --btn-secondary-bg-hover: rgb(28 28 28 / 0.5);
+  --btn-secondary-text: #ffffff;
+  --chip-bg: #212121;
+  --chip-bg-hover: rgb(33 33 33 / 0.75);
+  --chip-text: #ffffff;
+}

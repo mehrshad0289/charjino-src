@@ -1,0 +1,122 @@
+{
+    "scopeType": "subcategory",
+    "category": "game-topup",
+    "subcategory": "sample",
+    "title": "راهنمای خرید نمونه در شارژینو",
+    "summary": "شارژ مستقیم با Player ID. پرداخت ریالی است.",
+    "intro": "<p>شارژ مستقیم با Player ID. پرداخت ریالی است.<\/p>",
+    "status": "draft",
+    "sections": [
+        {
+            "type": "before_buy",
+            "inherit": false,
+            "data": {
+                "notes": [
+                    {
+                        "text": "ریجن حساب را با محصول یکی کنید.",
+                        "tone": "info"
+                    },
+                    {
+                        "text": "شارژینو رمز عبور نمی‌خواهد.",
+                        "tone": "info"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "fields",
+            "inherit": false,
+            "data": {
+                "items": [
+                    {
+                        "name": "player-id",
+                        "label": "Player ID",
+                        "help": "شناسهٔ عمومی حساب"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "purchase_steps",
+            "inherit": false,
+            "data": {
+                "steps": [
+                    {
+                        "text": "محصول را باز کنید"
+                    },
+                    {
+                        "text": "پرداخت کنید"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "redeem",
+            "inherit": false,
+            "data": {
+                "tabs": [
+                    {
+                        "key": "tab-0",
+                        "label": "موبایل",
+                        "steps": [
+                            {
+                                "text": "بازی را دوباره باز کنید"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "type": "errors",
+            "inherit": false,
+            "data": {
+                "items": [
+                    {
+                        "error": "شناسه نامعتبر",
+                        "fix": "دوباره کپی کنید"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "faq",
+            "inherit": false,
+            "data": {
+                "items": [
+                    {
+                        "q": "آیا رمز لازم است؟",
+                        "a": "خیر."
+                    }
+                ]
+            }
+        },
+        {
+            "type": "videos",
+            "inherit": false,
+            "data": {
+                "items": [
+                    {
+                        "provider": "youtube",
+                        "url": "https:\/\/www.youtube.com\/watch?v=hed6svCiX4c",
+                        "title": "نمونه",
+                        "lang": "en",
+                        "duration": "1:00"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "sources",
+            "inherit": false,
+            "data": {
+                "items": [
+                    {
+                        "url": "https:\/\/www.midasbuy.com\/midasbuy",
+                        "label": "Midasbuy:https:\/\/www.midasbuy.com\/midasbuy"
+                    }
+                ]
+            }
+        }
+    ]
+}

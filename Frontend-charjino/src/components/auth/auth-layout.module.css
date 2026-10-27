@@ -1,0 +1,128 @@
+.page {
+  min-height: 100svh;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  background: var(--color-background, #f4f7fb);
+}
+
+.shell {
+  width: 100%;
+}
+
+.back {
+  padding: 8px 16px 4px;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.visual {
+  order: -1;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(160deg, #f8fbff, #eef3fb);
+}
+
+.img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.form {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 0 16px 8px;
+}
+
+.brand {
+  display: none;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--color-text);
+}
+
+.lede {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.9;
+}
+
+@media (min-width: 1024px) {
+  .page {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 32px 48px;
+  }
+
+  .shell {
+    max-width: 80rem;
+    margin-inline: auto;
+    padding-inline: 16px;
+  }
+
+  .back {
+    padding: 0;
+    margin-bottom: 12px;
+  }
+
+  .card {
+    grid-template-columns: minmax(0, 400px) minmax(280px, 1fr);
+    align-items: stretch;
+    gap: 28px;
+    max-width: 980px;
+    margin-inline: auto;
+    padding: 24px;
+    border: 1px solid var(--color-border);
+    border-radius: 24px;
+    background: var(--color-white);
+    box-shadow: 0 10px 36px rgb(18 32 51 / 0.06);
+  }
+
+  .visual {
+    order: 0;
+    min-height: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+  }
+
+  .img {
+    height: 100%;
+    min-height: 420px;
+    object-fit: cover;
+  }
+
+  .form {
+    max-width: 400px;
+    justify-content: center;
+    padding: 8px 4px;
+  }
+
+  .brand {
+    display: flex;
+    margin-bottom: 16px;
+  }
+
+  .brand :global(img) {
+    width: auto;
+    height: 40px;
+  }
+}

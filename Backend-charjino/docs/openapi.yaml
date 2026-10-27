@@ -1,0 +1,3293 @@
+openapi: 3.1.0
+info:
+  title: Charjino (شارژینو) Store Backend API
+  version: 0.1.7-as-built-2026-09-26
+  summary: As-built contract of Backend-charjino (Laravel 12), derived strictly from source code.
+  description: |
+    **This document describes ONLY what exists in the code of `Backend-charjino` as of 2026-09-26 (Asia/Tehran).**
+    Nothing here is proposed. Remaining proposals live in `PROPOSED-standard.md`.
+
+    Source of truth:
+    - Routes: `Backend-charjino/routes/api.php` (prefix `/api`, set in `bootstrap/app.php` → `apiPrefix: 'api'`), `routes/web.php`
+    - Envelope: `app/Support/ApiResponse.php`
+    - Error rendering: `bootstrap/app.php` (`withExceptions`)
+    - Auth: `app/Http/Middleware/AuthenticateJwt.php`, `app/Http/Middleware/EnsureAdmin.php`, `app/Support/Jwt.php`, `app/Modules/Identity/IdentityService.php`
+
+    ### Response envelope
+    Every `/api/*` response (success or error) is JSON:
+    - success: `{ success: true, statusCode, data, message, timestamp }`
+    - error:   `{ success: false, statusCode, message, timestamp }` (no `data`, no per-field error map — validation returns only the FIRST message)
+
+    `message` is Persian. If `data` is an object that contains a non-empty string `message`, that value is also copied to the top-level `message`.
+
+    ### Money
+    - `price`, `minPrice`, `originalPrice`: integer **Toman** (تومان), computed server-side. Sell price = `costUsd × usdTomanRate × (1 + margin/100)`, rounded to the nearest 1000 (`PricingService::sellToman`). Margin is SKU override, else product override, else global `margin_percent`. `priceManual` SKUs stay frozen in Toman.
+    - `costUsd`, `liveCostUsd`, `usdTomanRate`, `marginPercent`, `wallet`: **decimal strings** (never floats). Public `Sku::toApi()` never includes `costUsd` — shop customers see sell Toman only.
+
+    ### Pagination
+    Public catalog: `GET /catalog/categories/{slug}` always returns `{category, products, meta}`.
+    `GET /catalog/products` stays a **bare array** unless `page`, `perPage` or `category` is set — then `data` is `{items, meta}`.
+    `meta` = `{page, perPage, total, totalPages}` (`page` default 1, `perPage` default 20, max 100).
+    Admin catalog products and admin orders return `{items, meta}` (`page` default 1, `perPage` default 20, max 100). Admin groups remain `{items: [...]}`.
+
+    ### Orders / payments
+    Implemented under `/api` (not `/api/v1`): validate-player → `POST /orders` (`draft`) → `POST /orders/{number}/pay` (`pending_payment`) → mock PSP `POST /payments/callback/mock` (`paid`) → worker persists supplier UUID then `fulfilling`. Live Shop2 `orders/create` stays locked unless `ALLOW_LIVE_ORDER=yes`. Until then fulfillment is dry-run (`fulfillment_attempts.dry_run=true`). Webhook `POST /webhooks/shop2topup` verifies HMAC-SHA256 on the **raw body**. Poll command `charjino:poll-fulfillment` caps Shop2 `GET /orders/:id` at 3/60s per UUID.
+  contact:
+    name: Charjino
+    url: https://charjino.ir
+  license:
+    name: MIT (as declared in Backend-charjino/composer.json)
+    identifier: MIT
+servers:
+  - url: http://127.0.0.1:3000/api
+    description: Local dev (`php artisan serve --port=3000`; composer script `dev`/`serve`; `.env.example` PORT=3000)
+  - url: https://api.charjino.ir/api
+    description: Production (deploy/charjino/nginx/api.conf, deploy/charjino/env/*.env.example)
+tags:
+  - name: System
+    description: Health, policy and non-/api web routes.
+  - name: Auth
+    description: Shop users log in with phone OTP; admins log in with email/password. Stateless HS256 JWT access token + opaque refresh token.
+  - name: Catalog (public)
+    description: Public storefront catalog. No auth. Only products with `status=active` AND `visible=true` are returned.
+  - name: Admin · Users
+    description: Requires Bearer access token whose JWT `role` claim is `admin`.
+  - name: Admin · Categories
+    description: Catalog groups. Manual create (`shop2BigCategoryId` null). Synced Shop2 groups hide on DELETE (`visible=false`); empty manual groups hard-delete; groups with products return 409.
+  - name: Admin · Products
+    description: Products and SKUs. List supports `category`/`status`/`q`/`page`. DELETE hides (`status=hidden`). SKU `price` is sell Toman (rounded to 100).
+  - name: Admin · Pricing
+    description: USD→Toman rate and margin settings; changing them re-prices every SKU.
+  - name: Admin · Uploads
+    description: Image upload to the `public` disk (served by `GET /storage/{path}`).
+  - name: Admin · Supplier (Shop2TopUp)
+    description: Supplier status and catalog sync. Calls Shop2TopUp server-to-server; the supplier only accepts calls from allow-listed server IPs.
+  - name: Checkout
+    description: Authenticated shop user. Player ID only (no game password/OTP/PIN).
+  - name: Orders
+    description: Authenticated shop user. Idempotency-Key required on create.
+  - name: Payments
+    description: Mock PSP callback (non-production). No JWT.
+  - name: Webhooks
+    description: Shop2TopUp HMAC webhook. No JWT.
+  - name: Tickets
+    description: Authenticated shop user. Statuses open / answered / closed.
+  - name: Favorites
+    description: Authenticated shop user. Unique (user, product).
+  - name: Admin · Tickets
+    description: Admin JWT. Reply as staff and close tickets.
+  - name: Admin · Orders
+    description: Admin JWT. Includes cost snapshot and supplier UUID; still no API keys.
+  - name: Admin · Buy guides
+    description: Manage hierarchical buy guides (category / subcategory / product) with WebP media and storefront revalidate.
+  - name: Blog (public)
+    description: Published shop blog. Optional Bearer on GET for liked flags. No Fazer/supplier calls.
+  - name: Blog (shop)
+    description: Authenticated shop user. Comment, reply (one level), like on post/comment.
+  - name: Admin · Blog
+    description: Admin JWT. Categories and post library (draft/publish). Comment hide.
+  - name: Catalog (shop comments)
+    description: Authenticated shop user. Product comment, one-level reply, like. Same rules as blog comments.
+  - name: Admin · Catalog comments
+    description: Admin JWT. Hide or restore product comments.
+  - name: Coupons
+    description: Shop coupon preview and apply at order create. Percentage has a Toman cap; amount type requires min purchase.
+security: []
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Health check
+      description: '`HealthController` (routes/api.php). Public.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Health' }
+              example:
+                success: true
+                statusCode: 200
+                data: { app: charjino-api, status: ok, language: fa, stack: laravel, supplierConfigured: false, liveOrderEnabled: false, database: mysql }
+                message: موفق
+                timestamp: '2026-09-25T16:00:00+03:30'
+        '500': { $ref: '#/components/responses/ServerError' }
+  /platform/policy:
+    get:
+      tags: [System]
+      operationId: getPlatformPolicy
+      summary: Product policy flags
+      description: 'Returns `config(''charjino.policy'')` (config/charjino.php). Public.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Policy' }
+  /auth/request-otp:
+    post:
+      tags: [Auth]
+      operationId: requestOtp
+      summary: Request a login OTP for a shop user (phone)
+      description: |
+        `AuthController::requestOtp` → `IdentityService::requestOtp`. Validation: `app/Http/Requests/RequestOtpRequest.php`.
+        - `phoneNumber` is normalized first (Persian/Arabic digits, `+98`/`0098`/`98` prefixes) and must then match `^09\d{9}$`.
+        - Route throttle: `throttle:10,10` (10 requests / 10 min).
+        - Business rate limit: max 5 OTP requests per phone per 600 s (config `charjino.otp.rate_max`, `rate_window_seconds`) → 429.
+        - OTP TTL 120 s. In non-production with `DEV_OTP_CODE` set, the code is that fixed value and is written to the log (masked phone).
+        - No SMS provider integration exists in code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RequestOtpBody' }
+            example: { phoneNumber: '09123456789' }
+      responses:
+        '200':
+          description: OTP issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MessageData' }
+              example: { success: true, statusCode: 200, data: { message: کد تأیید ارسال شد. }, message: کد تأیید ارسال شد., timestamp: '2026-09-25T16:00:00+03:30' }
+        '400':
+          description: '`DEV_OTP_CODE نامعتبر است.` (misconfigured DEV_OTP_CODE)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/verify-otp:
+    post:
+      tags: [Auth]
+      operationId: verifyOtp
+      summary: Verify OTP and open a shop-user session
+      description: |
+        `IdentityService::verifyOtp`. Validation: `VerifyOtpRequest.php` (`code` → digits only, 4–8 chars).
+        Creates the user (role `user`, status `active`) on first login. Max 5 attempts per challenge.
+        Throttle `throttle:20,10`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyOtpBody' }
+            example: { phoneNumber: '09123456789', code: '123456' }
+      responses:
+        '200':
+          description: Session issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ShopSession' }
+        '401':
+          description: '`کد تأیید نامعتبر است.` or `کد تأیید منقضی شده است.`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshAccessToken
+      summary: Exchange a refresh token for a new access token
+      description: |
+        `IdentityService::refresh`. Returns ONLY a new `access_token`; the refresh token is NOT rotated.
+        Validation: `RefreshTokenRequest.php`. No throttle.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshBody' }
+      responses:
+        '200':
+          description: New access token
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AccessTokenOnly' }
+        '401':
+          description: '`توکن بازیابی موجود نیست` (unknown, revoked or expired refresh token)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /auth/admin/login:
+    post:
+      tags: [Auth]
+      operationId: adminLogin
+      summary: Admin login (email + password)
+      description: |
+        `IdentityService::adminLogin`. Only users with `role=admin` can log in. Email is lower-cased and trimmed.
+        Admin user is created by `database/seeders/AdminSeeder.php` from env `ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NAME`.
+        Throttle `throttle:10,10`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminLoginBody' }
+      responses:
+        '200':
+          description: Session issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminSession' }
+        '401':
+          description: '`ایمیل یا رمز عبور نادرست است.`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Logout (revokes ALL refresh tokens of the user)
+      description: '`IdentityService::logout` sets `revoked_at` on every refresh token of the user (all devices). The access token itself stays valid until `exp`.'
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MessageData' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getMe
+      summary: Current user
+      description: '`User::toAuthUser()` — shape depends on role.'
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - $ref: '#/components/schemas/ShopAuthUser'
+                          - $ref: '#/components/schemas/AdminAuthUser'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/profile:
+    patch:
+      tags: [Auth]
+      operationId: updateShopProfile
+      summary: Update shop display name
+      description: '`IdentityService::updateProfile` — `{ name }` only. No national ID or address. Shop JWT required.'
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 40 }
+      responses:
+        '200':
+          description: Updated shop user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ShopAuthUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /catalog/home:
+    get:
+      tags: [Catalog (public)]
+      operationId: getCatalogHome
+      summary: Storefront home payload (banners, flash sale, categories with products, popular)
+      description: |
+        `CatalogService::home`. `groups` = visible `catalog_groups` (ordered by `sort_order`, `id`), each with `id`, `slug`, `name` (title), and its active+visible products; empty groups are dropped.
+        If there are NO catalog_groups at all, products are grouped by their `category_name` instead (`id` is null; `slug` is derived).
+        `popular` = first 8 products with `is_popular=true`. Products in a hidden group are omitted.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CatalogHome' }
+  /catalog/categories:
+    get:
+      tags: [Catalog (public)]
+      operationId: listCatalogCategories
+      summary: Visible catalog groups (id, slug, title)
+      description: '`CatalogService::categories`. Only `visible=true`, ordered by `sort_order`, `id`. Products in hidden groups are not counted.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/PublicCategory' }
+  /catalog/categories/{slug}:
+    get:
+      tags: [Catalog (public)]
+      operationId: getCatalogCategory
+      summary: Category page by slug (visible only)
+      description: |
+        `CatalogService::category`. 404 `دسته پیدا نشد.` if missing or hidden.
+        `products` are active+visible storefront products in that group. Query `page` (default 1) and `perPage` (default 20, max 100).
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+          example: game-topup
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: perPage
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PublicCategoryPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /catalog/products:
+    get:
+      tags: [Catalog (public)]
+      operationId: listCatalogProducts
+      summary: Active & visible products (search, category, pagination)
+      description: |
+        `CatalogService::products`. Products whose catalog group is hidden are omitted.
+        Query `q` searches title/subtitle/publisher/handle/code/name_en/category_name (max 20 rows when not paginated).
+        Query `popular=1` limits to `is_popular` (max 8 unless paginated / filtered by category).
+        Query `category` is a catalog group **slug**.
+        Query `platform` / `region` match supplier catalog values (case-insensitive). `Iran`/`IR` are not catalog regions and are ignored.
+        Game-key `platform` is whatever Fazer returns on `GET /gamekeys` (free string, not a fixed enum): PlayStation, Steam, Xbox, Nintendo, EA, Epic, and any other value are each their own bucket. Known aliases collapse (`PS5` → `playstation`). Empty platform with `appid` is Steam, because Fazer documents `appid` as Steam. No default platform. Category `game-keys` `meta.platforms` lists only buckets that exist in the current catalog.
+        Query `minPrice` / `maxPrice` filter by payable Toman.
+        Query `indexable=1` keeps products whose SEO `indexable` flag is true (used by the gift sitemap). Storefront listing omits this filter so every product URL still opens.
+        If `page`, `perPage` or `category` is present, `data` is `{items, meta}`; otherwise `data` is a bare array (keeps header search working).
+        Paginated `meta` also includes `platforms` and `regions` facet lists from the current result set.
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Text search
+        - in: query
+          name: popular
+          schema: { type: boolean }
+          description: Only popular products
+        - in: query
+          name: category
+          schema: { type: string }
+          description: Catalog group slug (e.g. game-topup)
+          example: game-topup
+        - in: query
+          name: platform
+          schema: { type: string }
+          description: Game-key bucket `ea`/`rockstar`/`steam`/`xbox`, or other supplier platform. No default. Iran is not used.
+        - in: query
+          name: region
+          schema: { type: string }
+          description: Supplier region. Iran is not a catalog region.
+        - in: query
+          name: minPrice
+          schema: { type: integer, minimum: 1 }
+          description: Minimum payable Toman
+        - in: query
+          name: maxPrice
+          schema: { type: integer, minimum: 1 }
+          description: Maximum payable Toman
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: perPage
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - in: query
+          name: indexable
+          schema: { type: boolean }
+          description: When set, filter by the product SEO indexable flag. Omitted on the public shop listing.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - type: array
+                            items: { $ref: '#/components/schemas/PublicProduct' }
+                          - $ref: '#/components/schemas/PublicProductPage'
+  /catalog/products/{handle}/prices:
+    get:
+      tags: [Catalog (public)]
+      operationId: getCatalogProductPrices
+      summary: Live sell prices for a product (no ISR payload)
+      description: '`CatalogService::productPrices`. Toman prices only. Intended for client refresh of ISR product HTML.'
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          schema: { type: string }
+          example: pubg-mobile
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [minPrice, skus]
+                        properties:
+                          minPrice: { type: [integer, 'null'] }
+                          skus:
+                            type: array
+                            items:
+                              type: object
+                              required: [id, code, price]
+                              properties:
+                                id: { type: integer }
+                                code: { type: string }
+                                price: { type: integer }
+                                originalPrice: { type: [integer, 'null'] }
+                                saleEndsAt: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /catalog/products/{handle}:
+    get:
+      tags: [Catalog (public)]
+      operationId: getCatalogProduct
+      summary: Product detail by handle (slug) or product code
+      description: '`CatalogService::product`. Matches `handle` or `code` case-insensitively. Includes `category{id,slug,title}` when the product belongs to a visible group. 404 `محصول پیدا نشد.` if missing, not active, not visible, or its group is hidden.'
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          schema: { type: string }
+          example: pubg-mobile
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PublicProductDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/users:
+    get:
+      tags: [Admin · Users]
+      operationId: adminListUsers
+      summary: List all users (newest first, no pagination)
+      description: '`AdminUserController::index`. Read-only; no user create/update/delete endpoints exist.'
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/AdminUserRow' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/settings:
+    get:
+      tags: [Admin · Pricing]
+      operationId: adminGetPricing
+      summary: Pricing snapshot (rate, margin, fx mode)
+      description: '`AdminSettingsController::show` → `PricingService::snapshot`.'
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PricingSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Admin · Pricing]
+      operationId: adminUpdatePricing
+      summary: Update rate/margin/fx mode and re-price ALL SKUs
+      description: |
+        `AdminSettingsController::update`. Sending `usdTomanRate` stores it with source `manual` and sets `fx_mode` to `fxMode ?? 'manual'`.
+        After saving, `PricingService::repriceAllSkus()` runs synchronously. Message: `تنظیمات قیمت ذخیره شد.`
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PricingUpdateBody' }
+            example: { usdTomanRate: 100000, marginPercent: 5, fxMode: manual }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PricingSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /admin/settings/fx:
+    post:
+      tags: [Admin · Pricing]
+      operationId: adminRefreshFx
+      summary: Fetch live USD→Toman rate and re-price all SKUs
+      description: |
+        `AdminSettingsController::refreshFx` first sets `fx_mode=auto`, then `FxRateService::refresh()`:
+        tries Nobitex `USDTIRT` orderbook (rial ÷ 10), then Tetherland; falls back to the stored rate; if none → 503.
+        Also scheduled daily at 09:10 via `charjino:refresh-fx` (routes/console.php).
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: Refreshed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/FxRefreshResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503':
+          description: '`گرفتن نرخ دلار انجام نشد. نرخ را دستی در پنل وارد کن.`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /admin/uploads:
+    post:
+      tags: [Admin · Uploads]
+      operationId: adminUploadImage
+      summary: Upload a catalog image
+      description: '`AdminSettingsController::upload`. Stores under `storage/app/public/catalog/`. Validation `file: required|image|max:4096` (KB).'
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: Image file (jpg/png/gif/bmp/svg/webp per Laravel `image` rule), ≤ 4 MB.
+      responses:
+        '200':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UploadResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /admin/buy-guides/coverage:
+    get:
+      tags: [Admin · Buy guides]
+      operationId: adminBuyGuideCoverage
+      summary: Category/subcategory coverage tree
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200': { description: Coverage tree }
+  /admin/buy-guides:
+    get:
+      tags: [Admin · Buy guides]
+      operationId: adminListBuyGuides
+      summary: List buy guides
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: subcategory, in: query, schema: { type: string } }
+        - { name: product_id, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Guide list }
+    post:
+      tags: [Admin · Buy guides]
+      operationId: adminCreateBuyGuide
+      summary: Create a buy guide
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '201': { description: Created }
+        '409': { description: Scope already exists }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /admin/buy-guides/{guide}:
+    get:
+      tags: [Admin · Buy guides]
+      operationId: adminGetBuyGuide
+      summary: Get buy guide
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: guide, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Guide }
+    put:
+      tags: [Admin · Buy guides]
+      operationId: adminUpdateBuyGuide
+      summary: Replace guide fields and sections
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: guide, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Admin · Buy guides]
+      operationId: adminDeleteBuyGuide
+      summary: Delete buy guide
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: guide, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Deleted }
+  /admin/buy-guides/{guide}/publish:
+    post:
+      tags: [Admin · Buy guides]
+      operationId: adminPublishBuyGuide
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: guide, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Published }
+  /admin/buy-guides/{guide}/unpublish:
+    post:
+      tags: [Admin · Buy guides]
+      operationId: adminUnpublishBuyGuide
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: guide, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Unpublished }
+  /admin/buy-guides/{guide}/duplicate:
+    post:
+      tags: [Admin · Buy guides]
+      operationId: adminDuplicateBuyGuide
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: guide, in: path, required: true, schema: { type: integer } }
+      responses:
+        '201': { description: Copied }
+  /admin/buy-guides/media:
+    post:
+      tags: [Admin · Buy guides]
+      operationId: adminUploadBuyGuideMedia
+      summary: Upload image (WebP) or MP4 with required alt
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200': { description: Stored }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /admin/buy-guides/resolve-preview:
+    get:
+      tags: [Admin · Buy guides]
+      operationId: adminBuyGuideResolvePreview
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: product_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Resolved payload including drafts }
+  /admin/buy-guides/region-options:
+    get:
+      tags: [Admin · Buy guides]
+      operationId: adminBuyGuideRegionOptions
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: category, in: query, required: true, schema: { type: string } }
+        - { name: subcategory, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Region rows from live catalog products }
+  /admin/buy-guides/media/{media}:
+    patch:
+      tags: [Admin · Buy guides]
+      operationId: adminUpdateBuyGuideMedia
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - { name: media, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Alt updated }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /admin/supplier:
+    get:
+      tags: [Admin · Supplier (Shop2TopUp)]
+      operationId: adminGetSupplierStatus
+      summary: Shop2TopUp configuration + account/wallet
+      description: |
+        `AdminSupplierController::show`. If `S2T_KEY` is set, calls Shop2TopUp `GET /account` through `Shop2Adapter` (no raw supplier payload). Errors include `accountErrorCode` (`IP_NOT_ALLOWED`, `INVALID_API_KEY`, …) while HTTP stays 200.
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SupplierStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/supplier/discover:
+    post:
+      tags: [Admin · Supplier (Shop2TopUp)]
+      operationId: adminDiscoverSupplierSkus
+      summary: Discover PUBG UC and COD CP item ids into sku-map (no secrets)
+      description: '`SkuDiscovery::discover`. Catalog GET only. Does not call orders/create.'
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SkuMap' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/SupplierUnavailable' }
+  /admin/supplier/sku-map:
+    get:
+      tags: [Admin · Supplier (Shop2TopUp)]
+      operationId: adminGetSkuMap
+      summary: Read stored PUBG/COD sku-map
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SkuMap' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/supplier/price:
+    get:
+      tags: [Admin · Supplier (Shop2TopUp)]
+      operationId: adminGetLiveSupplierPrice
+      summary: Live USD unit price for a supplier item
+      description: '`Shop2Adapter::livePrice`. Admin JWT. Query `itemId` or `internalCode` from sku-map.'
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: itemId
+          schema: { type: integer }
+        - in: query
+          name: internalCode
+          schema: { type: string, example: SKU_PUBG_UC_60 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [itemId, unitPrice, currency]
+                        properties:
+                          itemId: { type: integer }
+                          unitPrice: { type: string }
+                          currency: { type: string, const: USD }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/SupplierUnavailable' }
+  /admin/supplier/validate-player:
+    post:
+      tags: [Admin · Supplier (Shop2TopUp)]
+      operationId: adminValidatePlayer
+      summary: Validate player id against supplier before payment
+      description: |
+        `Shop2Adapter::validatePlayer`. Admin JWT. Never asks for game password/OTP.
+        Stable error codes include `REGION_MISMATCH`, `PLAYER_NOT_FOUND`, `IP_NOT_ALLOWED`.
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [playerId]
+              properties:
+                itemId: { type: integer }
+                internalCode: { type: string }
+                playerId: { type: string }
+                server: { type: string }
+                zoneId: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [playerName, itemId]
+                        properties:
+                          itemId: { type: integer }
+                          playerName: { type: string }
+                          region: { type: [string, 'null'] }
+                          zoneId: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/catalog/sync:
+    get:
+      tags: [Admin · Supplier (Shop2TopUp)]
+      operationId: adminCatalogSyncStatus
+      summary: Last catalog sync status (idle/running/completed/failed)
+      description: Cached last run. No secrets. `account` is email/wallet/currency/active only.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CatalogSyncStatus' }
+    post:
+      tags: [Admin · Supplier (Shop2TopUp)]
+      operationId: adminSyncCatalog
+      summary: Import/refresh categories, products and SKUs from Shop2TopUp
+      description: |
+        `CatalogSyncService::sync`. Returns `{status, startedAt, finishedAt, durationMs, account, groups, products, skus, pricing}`.
+        `account` never includes raw supplier payload. Admin-edited Persian fields are preserved. Then SKUs are re-priced.
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: Synced (message `کاتالوگ تأمین‌کننده همگام شد.`)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SyncResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/SupplierUnavailable' }
+  /admin/catalog/groups:
+    get:
+      tags: [Admin · Categories]
+      operationId: adminListCategories
+      summary: List categories (catalog groups) with product counts
+      description: '`AdminCatalogController::groups`. `source=manual` ساخته‌شده؛ `source=supplier` وصل به Shop2 یا FazerCards. `synced` یعنی دسته دستی نیست.'
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: source
+          schema: { type: string, enum: [manual, supplier, shop2, fazercards] }
+          description: Filter constructed vs supplier-linked groups
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/AdminCategory' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin · Categories]
+      operationId: adminCreateCategory
+      summary: Create a manual category (`shop2BigCategoryId` null)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                slug: { type: string }
+                description: { type: [string, 'null'] }
+                imageUrl: { type: [string, 'null'] }
+                visible: { type: boolean }
+                sortOrder: { type: integer }
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+  /admin/catalog/groups/unlinked:
+    delete:
+      tags: [Admin · Categories]
+      operationId: adminPurgeUnlinkedCategories
+      summary: Delete constructed groups that are not linked to a supplier
+      description: |
+        `AdminCatalogController::purgeUnlinkedGroups`. Detaches products then deletes groups with no `shop2BigCategoryId`
+        and no supplier-linked products. Shop2 / FazerCards groups are kept.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Purged
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [deleted, ids]
+                        properties:
+                          deleted: { type: integer }
+                          ids:
+                            type: array
+                            items: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/catalog/groups/{group}:
+    get:
+      tags: [Admin · Categories]
+      operationId: adminGetCategory
+      summary: Get one category by id
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminCategory' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin · Categories]
+      operationId: adminUpdateCategory
+      summary: Update a category (partial)
+      description: '`AdminCatalogController::updateGroup`. Route-model binding by numeric id; unknown id → 404 `مسیر پیدا نشد.`. Message `دسته ذخیره شد.`'
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCategoryUpdateBody' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminCategory' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Admin · Categories]
+      operationId: adminDeleteCategory
+      summary: Delete empty manual group; hide synced groups; 409 if products exist
+      description: Synced Shop2 groups are never hard-deleted (`visible=false`). Manual groups with products return 409 `CATEGORY_HAS_PRODUCTS`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      responses:
+        '200':
+          description: Deleted or hidden
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+        '409':
+          description: Has products
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /admin/catalog/products:
+    get:
+      tags: [Admin · Products]
+      operationId: adminListProducts
+      summary: List products with filters and pagination
+      description: '`?category=` id or slug, `status`, `q`, `visible`, `source`, `platform`, `region`, `page`, `perPage`. Returns `{items, meta}` with `platforms`/`regions` facets. Game-key `meta.platforms` lists every Fazer platform string present in the current result (PlayStation included), not a fixed four-name list.'
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: visible
+          schema: { type: string }
+        - in: query
+          name: source
+          schema: { type: string, enum: [manual, supplier, shop2, fazercards] }
+        - in: query
+          name: platform
+          schema: { type: string }
+        - in: query
+          name: region
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: perPage
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/AdminProduct' }
+                          meta: { $ref: '#/components/schemas/PageMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/catalog/products/{product}:
+    get:
+      tags: [Admin · Products]
+      operationId: adminGetProduct
+      summary: Product detail with all SKUs
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminProduct' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin · Products]
+      operationId: adminUpdateProduct
+      summary: Update a product (partial)
+      description: |
+        `AdminCatalogController::updateProduct`. Supports `catalogGroupId`, `handle`, `inputs` (password/otp/pin/login rejected).
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminProductUpdateBody' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminProduct' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Admin · Products]
+      operationId: adminHideProduct
+      summary: Hide product (`status=hidden`, `visible=false`) — no physical delete
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Hidden
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+  /admin/catalog/products/{product}/refresh-requirements:
+    post:
+      tags: [Admin · Products]
+      operationId: adminRefreshRequirements
+      summary: Reload Shop2 player input fields (no password/otp)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+  /admin/catalog/skus/{sku}:
+    put:
+      tags: [Admin · Products]
+      operationId: adminUpdateSku
+      summary: Update a SKU (name, visible, status, margin percent, sell price Toman)
+      description: |
+        `marginPercent` (0–100, or null to inherit product/global) reprices from USD cost × rate × (1 + margin/100), rounded to 1000 Toman, and clears `priceManual`.
+        If `price` is sent it is stored as a locked Toman amount (`priceManual=true`) and FX/margin sync will not change it.
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/SkuId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminSkuUpdateBody' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminSku' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /:
+    servers:
+      - url: http://127.0.0.1:3000
+      - url: https://api.charjino.ir
+    get:
+      tags: [System]
+      operationId: getRoot
+      summary: Web root (outside /api)
+      description: '`routes/web.php`. Returns the standard envelope with `{ app, stack, health }`.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          app: { type: string, const: charjino-api }
+                          stack: { type: string, const: laravel }
+                          health: { type: string, const: /api/health }
+  /checkout/validate-player:
+    post:
+      tags: [Checkout]
+      operationId: checkoutValidatePlayer
+      summary: Validate game Player ID before payment
+      description: '`CheckoutController::validatePlayer`. JWT user. Throttle 10/min. Rejects password/otp/pin/login keys. CODM Activision SKUs run `CodmRegionCheck` first (`validateMode=codm_store` on match). `422` `CODM_REGION_MISMATCH` / `PLAYER_ID_INVALID` block checkout. Until `S2T_KEY` is set, non-CODM may return a dry-run playerName.'
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [skuId, requirements]
+              properties:
+                skuId: { type: integer, minimum: 1 }
+                requirements:
+                  type: object
+                  additionalProperties: { type: string }
+                  example: { playerId: '5123456789' }
+      responses:
+        '200':
+          description: Player name for customer confirmation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ValidatePlayerResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422':
+          description: '`CODM_REGION_MISMATCH` (data = public region payload) or `PLAYER_ID_INVALID`'
+  /checkout/coupon:
+    post:
+      tags: [Coupons]
+      operationId: previewCheckoutCoupon
+      summary: Preview coupon against server-priced SKU subtotal
+      description: JWT shop user. Percentage is capped by maxPercentageAmount. Amount type requires minOrderToman.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, skuId]
+              properties:
+                code: { type: string, maxLength: 32 }
+                skuId: { type: integer, minimum: 1 }
+                quantity: { type: integer, minimum: 1, maximum: 100, default: 1 }
+                amount: { type: string }
+                currency: { type: string }
+      responses:
+        '200': { description: Quoted discount and payable Toman }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { description: COUPON_* }
+  /orders:
+    get:
+      tags: [Orders]
+      operationId: listMyOrders
+      summary: List the authenticated user's orders
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: perPage
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: '{items, meta}'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CustomerOrderPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Orders]
+      operationId: createOrder
+      summary: Create a DRAFT order (price snapshot, Idempotency-Key)
+      description: '`OrderController::store`. Header `Idempotency-Key` required. Same key+body returns the same order only while it is still payable; same key different body → 409 `IDEMPOTENCY_CONFLICT`. A new key always opens a new draft so an unpaid previous cart does not block checkout.'
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, maxLength: 80 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [skuId, requirements]
+              properties:
+                skuId: { type: integer }
+                quantity: { type: integer, minimum: 1, maximum: 100, default: 1 }
+                couponCode: { type: string, maxLength: 32, description: 'Optional. Percentage is capped; amount type requires min purchase.' }
+                requirements:
+                  type: object
+                  example: { playerId: '5123456789' }
+      responses:
+        '200':
+          description: Draft order (no costUsd)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CustomerOrder' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /orders/{number}:
+    get:
+      tags: [Orders]
+      operationId: getMyOrder
+      summary: Order detail for invoices page
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/OrderNumber'
+      responses:
+        '200':
+          description: Customer order (no supplier UUID, no costUsd)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CustomerOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /orders/{number}/pay:
+    post:
+      tags: [Orders]
+      operationId: payOrder
+      summary: Start PSP (Zibal or mock)
+      description: Default driver is Zibal (`PAYMENT_DRIVER=zibal`). Mock only when `PAYMENT_DRIVER=mock` (PHPUnit). Returns `redirectUrl` + `authority` + `provider`. Optional `returnOrigin` so callback returns to the same shop host as the login cookie. Zibal `redirectUrl` is `https://gateway.zibal.ir/start/{trackId}`.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/OrderNumber'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                returnOrigin:
+                  type: string
+                  example: http://localhost:3001
+      responses:
+        '200':
+          description: Redirect payload
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PayOrderResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '410':
+          description: Payment window expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /tickets:
+    get:
+      tags: [Tickets]
+      operationId: listMyTickets
+      summary: List the authenticated user's support tickets
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: perPage
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: '{items, meta}'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TicketPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Tickets]
+      operationId: createTicket
+      summary: Open a support ticket
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, body]
+              properties:
+                subject: { type: string, minLength: 4, maxLength: 160 }
+                body: { type: string, minLength: 8, maxLength: 4000 }
+                category: { type: string, enum: [order, payment, delivery, account, other] }
+                orderNumber: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: Ticket with first message
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TicketDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /tickets/{ticket}:
+    get:
+      tags: [Tickets]
+      operationId: getMyTicket
+      summary: Ticket thread for the owner
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: Ticket with messages
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TicketDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tickets/{ticket}/messages:
+    post:
+      tags: [Tickets]
+      operationId: replyMyTicket
+      summary: Reply on an open or answered ticket
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 2, maxLength: 4000 }
+      responses:
+        '200':
+          description: Updated thread
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TicketDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /favorites:
+    get:
+      tags: [Favorites]
+      operationId: listMyFavorites
+      summary: List favorites, or check one product with productId
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: productId
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: perPage
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Page of favorites, or {productId, favorited}
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Favorites]
+      operationId: addFavorite
+      summary: Add a visible catalog product to favorites
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId]
+              properties:
+                productId: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: '{favorited: true, item}'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /favorites/{product}:
+    delete:
+      tags: [Favorites]
+      operationId: removeFavorite
+      summary: Remove a product from favorites
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: product
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: '{productId, favorited: false}'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /admin/tickets:
+    get:
+      tags: [Admin · Tickets]
+      operationId: adminListTickets
+      summary: Admin ticket inbox
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [open, answered, closed] }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: perPage
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200':
+          description: '{items, meta}'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/tickets/{ticket}:
+    get:
+      tags: [Admin · Tickets]
+      operationId: adminGetTicket
+      summary: Admin ticket thread
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: Ticket with user phone
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/tickets/{ticket}/messages:
+    post:
+      tags: [Admin · Tickets]
+      operationId: adminReplyTicket
+      summary: Staff reply (sets status answered)
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+      responses:
+        '200':
+          description: Updated thread
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/tickets/{ticket}/status:
+    post:
+      tags: [Admin · Tickets]
+      operationId: adminSetTicketStatus
+      summary: Set ticket status
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, answered, closed] }
+      responses:
+        '200':
+          description: Updated ticket
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /payments/verify/zibal:
+    get:
+      tags: [Payments]
+      operationId: paymentVerifyZibalBrowser
+      summary: Zibal browser return (302 to shop /payments/zibal)
+      description: No JWT. If the Zibal panel callback points here, GET redirects to the shop verify page so login cookies stay same-origin.
+      parameters:
+        - name: trackId
+          in: query
+          schema: { type: string }
+        - name: success
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: orderId
+          in: query
+          schema: { type: string }
+      responses:
+        '302':
+          description: Redirect to shop /payments/zibal
+    post:
+      tags: [Payments]
+      operationId: paymentVerifyZibal
+      summary: Verify Zibal payment (shop same-origin)
+      description: No JWT. Shop `/payments/zibal` POSTs `{trackId, success, status, orderId}`. Accepts Zibal verify result 100 or 201. Idempotent if already paid.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trackId]
+              properties:
+                trackId: { type: string }
+                success: { type: string }
+                status: { type: string }
+                orderId: { type: string }
+      responses:
+        '200':
+          description: Payment verified
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CustomerOrder' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /payments/callback/{provider}:
+    get:
+      tags: [Payments]
+      operationId: paymentCallbackBrowser
+      summary: PSP browser return
+      description: 'No JWT. `mock` GET verifies then 302 to shop invoice. `zibal` GET 302 to shop `/payments/zibal` (verify happens on the shop POST).'
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [mock, zibal] }
+        - name: authority
+          in: query
+          schema: { type: string }
+        - name: trackId
+          in: query
+          schema: { type: string }
+        - name: success
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: orderId
+          in: query
+          schema: { type: string }
+      responses:
+        '302':
+          description: Redirect to shop invoice or /payments/zibal
+    post:
+      tags: [Payments]
+      operationId: paymentCallback
+      summary: PSP callback (mock provider verifies and dispatches fulfill job)
+      description: 'No JWT. `mock` verifies then JSON or 302 to shop. `zibal` GET 302 to shop `/payments/zibal`; POST verifies with Zibal.'
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [mock, zibal] }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                authority: { type: string }
+                status: { type: string, example: OK }
+      responses:
+        '200':
+          description: Payment verified
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CustomerOrder' }
+  /webhooks/shop2topup:
+    post:
+      tags: [Webhooks]
+      operationId: shop2Webhook
+      summary: Shop2TopUp webhook (HMAC on raw body, idempotent)
+      description: |
+        Verify first: `X-Shop2Topup-Signature: sha256=<hmac-sha256(raw body, S2T_WEBHOOK_SECRET)>` with `hash_equals`.
+        Then JSON parse. Events `order.completed`, `order.refunded`, `webhook.test`.
+        Unique `(event, supplier_order_id)`. Duplicate → 200. Heavy work queued (`ProcessShop2Webhook`; sync in tests).
+      parameters:
+        - name: X-Shop2Topup-Signature
+          in: header
+          required: true
+          schema: { type: string, example: sha256=abc }
+        - name: X-Shop2Topup-Event
+          in: header
+          required: true
+          schema: { type: string, example: order.completed }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event: { type: string }
+                order_id: { type: string, format: uuid }
+                status: { type: string }
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          description: Invalid HMAC
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /admin/orders:
+    get:
+      tags: [Admin · Orders]
+      operationId: adminListOrders
+      summary: Admin order list
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: perPage
+          schema: { type: integer }
+      responses:
+        '200':
+          description: '{items, meta} with cost snapshot and attempts'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/orders/{order}:
+    get:
+      tags: [Admin · Orders]
+      operationId: adminShowOrder
+      summary: Admin order detail (id or number)
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/AdminOrderId'
+      responses:
+        '200':
+          description: Order + payments + fulfillment attempts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/orders/{order}/retry-fulfillment:
+    post:
+      tags: [Admin · Orders]
+      operationId: adminRetryFulfillment
+      summary: Retry fulfill with the same supplier UUID
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/AdminOrderId'
+      responses:
+        '200':
+          description: Re-queued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+  /admin/orders/{order}/mark-refunded:
+    post:
+      tags: [Admin · Orders]
+      operationId: adminMarkRefunded
+      summary: Manual policy refund (Toman order, never coin cash-out)
+      description: Allowed from failed/partial/delivered/refund_pending/fulfilling. Body `{reason}` optional. Status-only Toman policy — never coin/wallet cash-out.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/AdminOrderId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: Refunded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+  /admin/orders/{order}/cancel:
+    post:
+      tags: [Admin · Orders]
+      operationId: adminCancelOrder
+      summary: Cancel unpaid draft/pending_payment orders
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/AdminOrderId'
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+  /admin/dashboard/summary:
+    get:
+      tags: [Admin · Orders]
+      operationId: adminDashboardSummary
+      summary: Today orders, revenue, pending fulfillment, supplier wallet
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminDashboardSummary' }
+  /storage/{path}:
+    servers:
+      - url: http://127.0.0.1:3000
+      - url: https://api.charjino.ir
+    get:
+      tags: [System]
+      operationId: getStorageFile
+      summary: Serve an uploaded public file (outside /api)
+      description: '`routes/web.php`. Path-traversal protected; 404 (HTML, not JSON envelope) if missing.'
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema: { type: string }
+          example: catalog/abc123.png
+      responses:
+        '200':
+          description: File bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, contentMediaType: application/octet-stream }
+        '404':
+          description: Not found
+  /blog:
+    get:
+      tags: [Blog (public)]
+      operationId: getBlogHub
+      summary: Blog hub (categories, latest, popular)
+      responses:
+        '200': { description: OK }
+  /blog/posts:
+    get:
+      tags: [Blog (public)]
+      operationId: listBlogPosts
+      summary: Published posts (q, category slug, page)
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /blog/posts/{slug}:
+    get:
+      tags: [Blog (public)]
+      operationId: getBlogPost
+      summary: Published post by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /blog/posts/{slug}/comments:
+    get:
+      tags: [Blog (public)]
+      operationId: listBlogComments
+      summary: Approved comments with one-level replies
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Blog (shop)]
+      operationId: storeBlogComment
+      summary: Create comment or reply (pending until admin approves)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+                parentId: { type: integer, nullable: true }
+      responses:
+        '201': { description: Created }
+        '401': { description: Auth required }
+  /blog/posts/{slug}/like:
+    post:
+      tags: [Blog (shop)]
+      operationId: likeBlogPost
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Toggled }
+  /blog/comments/{comment}/like:
+    post:
+      tags: [Blog (shop)]
+      operationId: likeBlogComment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: comment
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Toggled }
+  /blog/categories:
+    get:
+      tags: [Blog (public)]
+      operationId: listBlogCategories
+      responses:
+        '200': { description: OK }
+  /blog/categories/{slug}:
+    get:
+      tags: [Blog (public)]
+      operationId: getBlogCategory
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /admin/blog/categories:
+    get:
+      tags: [Admin · Blog]
+      operationId: adminListBlogCategories
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Admin · Blog]
+      operationId: adminCreateBlogCategory
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Created }
+  /admin/blog/categories/{category}:
+    put:
+      tags: [Admin · Blog]
+      operationId: adminUpdateBlogCategory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: category
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Admin · Blog]
+      operationId: adminDeleteBlogCategory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: category
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /admin/blog/posts:
+    get:
+      tags: [Admin · Blog]
+      operationId: adminListBlogPosts
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Admin · Blog]
+      operationId: adminCreateBlogPost
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Created }
+  /admin/blog/posts/{post}:
+    get:
+      tags: [Admin · Blog]
+      operationId: adminGetBlogPost
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: post
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Admin · Blog]
+      operationId: adminUpdateBlogPost
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: post
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Admin · Blog]
+      operationId: adminDeleteBlogPost
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: post
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /admin/blog/posts/{post}/publish:
+    post:
+      tags: [Admin · Blog]
+      operationId: adminPublishBlogPost
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: post
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /admin/blog/posts/{post}/unpublish:
+    post:
+      tags: [Admin · Blog]
+      operationId: adminUnpublishBlogPost
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: post
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /admin/blog/comments:
+    get:
+      tags: [Admin · Blog]
+      operationId: adminListBlogComments
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /admin/blog/comments/{comment}:
+    patch:
+      tags: [Admin · Blog]
+      operationId: adminUpdateBlogComment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: comment
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /catalog/products/{handle}/comments:
+    get:
+      tags: [Catalog (shop comments)]
+      operationId: listProductComments
+      summary: Approved product comments with one-level replies
+      parameters:
+        - in: path
+          name: handle
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+    post:
+      tags: [Catalog (shop comments)]
+      operationId: storeProductComment
+      summary: Create product comment or reply (pending until admin approves)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: handle
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+                parentId: { type: integer, nullable: true }
+      responses:
+        '201': { description: Created }
+        '401': { description: Auth required }
+  /catalog/comments/{comment}/like:
+    post:
+      tags: [Catalog (shop comments)]
+      operationId: likeProductComment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: comment
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Toggled }
+  /admin/catalog/comments:
+    get:
+      tags: [Admin · Catalog comments]
+      operationId: adminListProductComments
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /admin/catalog/comments/{comment}:
+    patch:
+      tags: [Admin · Catalog comments]
+      operationId: adminUpdateProductComment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: comment
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /admin/coupons:
+    get:
+      tags: [Coupons]
+      operationId: adminListCoupons
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{items, meta}' }
+    post:
+      tags: [Coupons]
+      operationId: adminCreateCoupon
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Created }
+  /admin/coupons/{coupon}:
+    get:
+      tags: [Coupons]
+      operationId: adminGetCoupon
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: coupon
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Coupons]
+      operationId: adminUpdateCoupon
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: coupon
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Coupons]
+      operationId: adminDeleteCoupon
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: coupon
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Soft-deleted }
+  /up:
+    servers:
+      - url: http://127.0.0.1:3000
+      - url: https://api.charjino.ir
+    get:
+      tags: [System]
+      operationId: getLaravelUp
+      summary: Laravel built-in health route (outside /api)
+      description: '`bootstrap/app.php` → `health: ''/up''`. Framework default HTML page.'
+      responses:
+        '200':
+          description: Application up
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        HS256 JWT signed with env `JWT_ACCESS_SECRET` (`app/Support/Jwt.php`). TTL `JWT_ACCESS_TTL` (default 1800 s).
+        Claims: `sub` (user UUID), `role` (`admin`|`user`), `phoneNumber`, `email`, `iat`, `exp`.
+        Admin routes additionally require `role == "admin"` (`EnsureAdmin`) → otherwise 403.
+        Both Next.js apps keep tokens in httpOnly cookies `access_token` / `refresh_token` and call the API server-side only.
+  parameters:
+    GroupId:
+      name: group
+      in: path
+      required: true
+      description: '`catalog_groups.id`'
+      schema: { type: integer, minimum: 1 }
+    ProductId:
+      name: product
+      in: path
+      required: true
+      description: '`products.id` (numeric id, NOT handle)'
+      schema: { type: integer, minimum: 1 }
+    SkuId:
+      name: sku
+      in: path
+      required: true
+      description: '`skus.id`'
+      schema: { type: integer, minimum: 1 }
+    OrderNumber:
+      name: number
+      in: path
+      required: true
+      description: Public order number (`CH…`)
+      schema: { type: string, example: CH260926ABCDEF }
+    TicketId:
+      name: ticket
+      in: path
+      required: true
+      description: Ticket UUID or public number (`TK…`)
+      schema: { type: string }
+    AdminOrderId:
+      name: order
+      in: path
+      required: true
+      description: Order UUID or public number
+      schema: { type: string }
+  responses:
+    Unauthorized:
+      description: 'Missing/invalid/expired Bearer token → `احراز هویت نامعتبر است`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { success: false, statusCode: 401, message: احراز هویت نامعتبر است, timestamp: '2026-09-25T16:00:00+03:30' }
+    Forbidden:
+      description: 'Authenticated but JWT role is not admin → `دسترسی مجاز نیست.`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { success: false, statusCode: 403, message: دسترسی مجاز نیست., timestamp: '2026-09-25T16:00:00+03:30' }
+    BadRequest:
+      description: 'Supplier/domain 400 with optional `error.code` (`REGION_MISMATCH`, `CODM_REGION_MISMATCH`, `PLAYER_NOT_FOUND`, `INSUFFICIENT_BALANCE`, …)'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: '`مسیر پیدا نشد.` (unknown route or unknown model id), `محصول پیدا نشد.` (public product), or `دسته پیدا نشد.` (public category slug)'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ValidationError:
+      description: 'Laravel validation failure. Only the FIRST error message is returned (no field map).'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { success: false, statusCode: 422, message: شماره همراه معتبر نیست., timestamp: '2026-09-25T16:00:00+03:30' }
+    TooManyRequests:
+      description: 'Route throttle or OTP business limits → `تعداد درخواست بیش از حد مجاز است.` / `تعداد تلاش بیش از حد مجاز است.`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    SupplierUnavailable:
+      description: 'Shop2TopUp not configured (`کلید تأمین‌کننده تنظیم نشده است.`) or unreachable (`اتصال به تأمین‌کننده برقرار نشد...`). Other supplier errors keep the supplier HTTP status.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ServerError:
+      description: 'Unhandled exception → `درخواست انجام نشد` (exception message only when APP_DEBUG=true)'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [success, statusCode, data, message, timestamp]
+      properties:
+        success: { type: boolean, const: true }
+        statusCode: { type: integer, example: 200 }
+        data: {}
+        message: { type: string, description: Persian message (default `موفق`) }
+        timestamp: { type: string, format: date-time }
+    ErrorResponse:
+      type: object
+      required: [success, statusCode, message, timestamp]
+      properties:
+        success: { type: boolean, const: false }
+        statusCode: { type: integer, example: 422 }
+        message: { type: string }
+        timestamp: { type: string, format: date-time }
+        error:
+          type: object
+          description: Present when the failure has a stable machine code (supplier errors, live-order lock).
+          properties:
+            code: { type: string, example: IP_NOT_ALLOWED }
+    MessageData:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+    Health:
+      type: object
+      required: [app, status, language, stack, supplierConfigured, liveOrderEnabled, paymentDriver, database]
+      properties:
+        app: { type: string, const: charjino-api }
+        status: { type: string, const: ok }
+        language: { type: string, const: fa }
+        stack: { type: string, const: laravel }
+        supplierConfigured: { type: boolean, description: 'true if env S2T_KEY is non-empty' }
+        liveOrderEnabled: { type: boolean, description: 'env ALLOW_LIVE_ORDER == "yes" (Shop2)' }
+        fazercardsConfigured: { type: boolean, description: 'FazerCards API key present' }
+        fazercardsLiveOrderEnabled: { type: boolean, description: 'FAZERCARDS_ALLOW_LIVE_ORDER or admin settings' }
+        paymentDriver: { type: string, description: 'mock | zibal' }
+        database: { type: string, description: 'config database.default, e.g. mysql / sqlite' }
+    Policy:
+      type: object
+      properties:
+        language: { type: string, const: fa }
+        direction: { type: string, const: rtl }
+        neverAskGamePassword: { type: boolean }
+        noNetworkBypassTools: { type: boolean }
+        noCrypto: { type: boolean }
+        noUserToUserTransfer: { type: boolean }
+        noCashOut: { type: boolean }
+        noOutcomeToPurchasableValue: { type: boolean }
+        noChanceBoxWithPurchasableReward: { type: boolean }
+        gameOutsideShopMvp: { type: boolean }
+        coinFromGameplayDisabled: { type: boolean }
+    RequestOtpBody:
+      type: object
+      required: [phoneNumber]
+      properties:
+        phoneNumber: { type: string, description: 'Iranian mobile; normalized to 09XXXXXXXXX', example: '09123456789' }
+    VerifyOtpBody:
+      type: object
+      required: [phoneNumber, code]
+      properties:
+        phoneNumber: { type: string, example: '09123456789' }
+        code: { type: string, minLength: 4, maxLength: 8, description: 'digits only after normalization', example: '123456' }
+    RefreshBody:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string, minLength: 16 }
+    AdminLoginBody:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6 }
+    AccessTokenOnly:
+      type: object
+      required: [access_token]
+      properties:
+        access_token: { type: string }
+    ShopAuthUser:
+      type: object
+      required: [id, phoneNumber, role]
+      properties:
+        id: { type: string, format: uuid }
+        phoneNumber: { type: [string, 'null'], example: '09123456789' }
+        name: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'] }
+        role: { type: string, const: user }
+    AdminAuthUser:
+      type: object
+      required: [id, email, role]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, const: admin }
+    ShopSession:
+      type: object
+      required: [access_token, refresh_token, user]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string, description: 'opaque 96-hex-char token; stored hashed; TTL JWT_REFRESH_TTL (default 432000 s = 5 days)' }
+        user: { $ref: '#/components/schemas/ShopAuthUser' }
+    AdminSession:
+      type: object
+      required: [access_token, refresh_token, user]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        user: { $ref: '#/components/schemas/AdminAuthUser' }
+    CatalogStatus:
+      type: string
+      enum: [active, draft, hidden]
+      description: 'products.status / skus.status (validation `in:active,draft,hidden`)'
+    Banner:
+      type: object
+      required: [id, src, title, href, description]
+      properties:
+        id: { type: integer }
+        src: { type: string }
+        mediaType: { type: string, enum: [image, gif, video] }
+        title: { type: string }
+        href: { type: string }
+        description: { type: string }
+    FlashSaleItem:
+      type: object
+      description: 'Static rows from `flash_sale_items` (seeded; no admin endpoint manages them). Prices are stored, NOT derived from SKU pricing.'
+      required: [id, image, originalPrice, price, productCode, productHandle, productName, productVariantCode, productVariantName]
+      properties:
+        id: { type: integer }
+        image: { type: string }
+        originalPrice: { type: integer, description: Toman }
+        price: { type: integer, description: Toman }
+        productCode: { type: string }
+        productHandle: { type: string }
+        productName: { type: string }
+        productVariantCode: { type: string }
+        productVariantName: { type: string }
+    PublicProduct:
+      type: object
+      description: '`Product::toApi()`'
+      required: [id, categoryName, code, handle, inputs, isPopular, publisher, subtitle, thumbnail, title, minPrice]
+      properties:
+        id: { type: integer }
+        categoryName: { type: string, description: 'catalog group title if loaded, else products.category_name' }
+        code: { type: string }
+        handle: { type: string, description: 'URL slug used by /catalog/products/{handle}' }
+        inputs:
+          type: array
+          description: 'Buyer input keys. Seeded products have ["playerId"]; products created by Shop2 sync have [] (sync does not fill it).'
+          items: { type: string }
+        isPopular: { type: boolean }
+        indexable: { type: boolean, description: 'SEO indexable flag. Steam gifts default false except ~500 demand games.' }
+        publisher: { type: string, description: 'Public publisher; supplier brands are blank' }
+        subtitle: { type: string }
+        seoTitle: { type: [string, 'null'], description: 'Optional admin override for document title' }
+        seoDescription: { type: [string, 'null'], description: 'Optional admin override for meta description' }
+        description: { type: [string, 'null'] }
+        thumbnail: { type: string, description: 'image_url || thumbnail || /image/catalog/pubg-mobile.svg' }
+        title: { type: string, description: 'Storefront title; generic Direct Topup uses the catalog group name' }
+        titleEn: { type: [string, 'null'], description: 'English name for search and SEO' }
+        minPrice: { type: [integer, 'null'], description: 'min Toman sell price of active+visible SKUs (USD cost x rate x margin, rounded to 100)' }
+        platform: { type: [string, 'null'], description: 'Canonical game-key bucket ea/rockstar/steam/xbox when applicable; otherwise supplier platform' }
+        region: { type: [string, 'null'], description: 'Supplier region when a single real region exists. Iran is never a catalog region.' }
+        fulfillmentType: { type: [string, 'null'] }
+        validateMode: { type: string, enum: [api, manual] }
+        identityKind: { type: string, enum: [player, user, account], description: 'player for games, user for Telegram/Discord, account for stores' }
+    PublicSku:
+      type: object
+      description: '`Sku::toApi()` — sell Toman only; never includes supplier costUsd'
+      required: [id, code, name, price, fulfillmentType]
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        nameEn: { type: [string, 'null'], description: 'English name for search and SEO' }
+        price: { type: integer, description: 'Payable Toman; sale price while discount is active' }
+        originalPrice: { type: [integer, 'null'], description: 'List price when a sale is active' }
+        saleEndsAt: { type: [string, 'null'], format: date-time }
+        fulfillmentType: { type: [string, 'null'] }
+        region: { type: [string, 'null'] }
+        minOrderQuantity: { type: integer, minimum: 1, description: 'Supplier min qty, at least 1' }
+        maxOrderQuantity: { type: integer, minimum: 1, maximum: 100, description: 'Supplier max qty, shop-capped at 100' }
+        filters:
+          type: object
+          additionalProperties: { type: string }
+          description: 'Facet values for this SKU (`region`/`edition`/`denomination`/`duration`) when the product has packFilters'
+    BuyerInputField:
+      type: object
+      description: '`BuyerInputFields::sanitize` — password/otp/pin/login names are stripped'
+      required: [name, label, type, required]
+      properties:
+        name: { type: string }
+        label: { type: string }
+        type: { type: string }
+        required: { type: boolean }
+        options: {}
+    ValidatePlayerResult:
+      type: object
+      description: '`OrderService::validatePlayer` for the shop user'
+      required: [playerName, skuId]
+      properties:
+        playerName: { type: string }
+        region: { type: [string, 'null'] }
+        zoneId: { type: [string, 'null'] }
+        skuId: { type: integer }
+        validateMode: { type: string, enum: [api, manual, codm_store] }
+        validation: { type: string, enum: [ok, unsupported, skipped, unverified] }
+        identityKind: { type: string, enum: [player, user, account] }
+        warning: { type: [string, 'null'] }
+        unverified: { type: boolean }
+        codmRegion:
+          type: object
+          properties:
+            status: { type: string, enum: [match, mismatch, unknown] }
+            variantCountry: { type: string }
+            nickname: { type: [string, 'null'] }
+            shortId: { type: [string, 'null'] }
+            accountCountry: { type: [string, 'null'] }
+            suggestedVariant: { type: [string, 'null'] }
+            suggestedHandle: { type: [string, 'null'] }
+            variantHandle: { type: [string, 'null'] }
+    CustomerOrder:
+      type: object
+      description: '`Order::toCustomer()` — no costUsd, no supplier UUID'
+      required: [id, number, status, amountToman, quantity, dryRun]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string, example: CH260926ABCDEF }
+        status: { type: string, example: fulfilling }
+        amountToman: { type: integer, description: Toman payable after coupon }
+        subtotalToman: { type: integer, description: Toman before coupon }
+        discountToman: { type: integer }
+        couponCode: { type: [string, 'null'] }
+        quantity: { type: integer }
+        playerName: { type: [string, 'null'] }
+        playerId: { type: [string, 'null'], description: 'Owner-only Player ID from order requirements' }
+        skuName: { type: [string, 'null'] }
+        productTitle: { type: [string, 'null'] }
+        customerMessage: { type: [string, 'null'] }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: [string, 'null'], format: date-time }
+        timeline:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string }
+              at: { type: [string, 'null'] }
+              status: { type: [string, 'null'] }
+        dryRun: { type: boolean, description: 'true when ALLOW_LIVE_ORDER is not yes or this attempt is dry-run' }
+        paymentProvider: { type: [string, 'null'] }
+        paymentRef: { type: [string, 'null'], description: 'Zibal refNumber after verify' }
+        paymentCardMasked: { type: [string, 'null'] }
+    PayOrderResult:
+      type: object
+      required: [redirectUrl, authority, provider, order]
+      properties:
+        redirectUrl: { type: string }
+        authority: { type: string }
+        provider: { type: string, example: zibal }
+        order: { $ref: '#/components/schemas/CustomerOrder' }
+    CustomerOrderPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CustomerOrder' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    Ticket:
+      type: object
+      required: [id, number, subject, status]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        subject: { type: string }
+        category: { type: string, enum: [order, payment, delivery, account, other] }
+        orderNumber: { type: [string, 'null'] }
+        status: { type: string, enum: [open, answered, closed] }
+        createdAt: { type: [string, 'null'], format: date-time }
+        updatedAt: { type: [string, 'null'], format: date-time }
+    TicketMessage:
+      type: object
+      required: [id, sender, body]
+      properties:
+        id: { type: integer }
+        sender: { type: string, enum: [user, staff] }
+        body: { type: string }
+        createdAt: { type: [string, 'null'], format: date-time }
+    TicketDetail:
+      allOf:
+        - $ref: '#/components/schemas/Ticket'
+        - type: object
+          properties:
+            messages:
+              type: array
+              items: { $ref: '#/components/schemas/TicketMessage' }
+    TicketPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Ticket' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    PublicProductDetail:
+      allOf:
+        - $ref: '#/components/schemas/PublicProduct'
+        - type: object
+          required: [skus, requirements, inputFields]
+          properties:
+            skus:
+              type: array
+              items: { $ref: '#/components/schemas/PublicSku' }
+            packFilters:
+              type: array
+              description: 'Family-specific SKU facets for the product page. Empty when fewer than 4 SKUs or a dimension has only one value.'
+              items:
+                type: object
+                required: [key, label, options]
+                properties:
+                  key: { type: string, enum: [region, edition, denomination, duration] }
+                  label: { type: string }
+                  options:
+                    type: array
+                    items:
+                      type: object
+                      required: [value, label]
+                      properties:
+                        value: { type: string }
+                        label: { type: string }
+            requirements:
+              type: array
+              description: 'products.requirements JSON (never populated by current sync code → usually [])'
+              items: {}
+            inputFields:
+              type: array
+              description: 'Sanitized buyer fields for the product form (Formik). Defaults to playerId if empty.'
+              items: { $ref: '#/components/schemas/BuyerInputField' }
+            category:
+              type: [object, 'null']
+              required: [id, slug, title]
+              properties:
+                id: { type: integer }
+                slug: { type: string }
+                title: { type: string }
+                purchaseGuide: { type: [string, 'null'], description: 'Per-category purchase help shown in the product-page modal. Newlines are kept.' }
+                purchaseGuideItems:
+                  type: array
+                  items: {}
+            codm:
+              type: [object, 'null']
+              description: 'CODM version switcher + Activision region-check flags (`CodmCatalog::payload`). Null for non-CODM products.'
+              properties:
+                hint: { type: string }
+                versions:
+                  type: array
+                  items:
+                    type: object
+                    required: [handle, label, selected]
+                    properties:
+                      handle: { type: string }
+                      label: { type: string }
+                      selected: { type: boolean }
+                regionCheck: { type: boolean }
+                variantCountry: { type: [string, 'null'] }
+                guideHref: { type: [string, 'null'] }
+            buyGuide:
+              type: [object, 'null']
+              description: 'Resolved BuyGuide payload (`BuyGuideResolver`). Drafts are omitted. `legacyItems` is the old group slide guide when no published BuyGuide exists.'
+              properties:
+                title: { type: string }
+                summary: { type: [string, 'null'] }
+                introHtml: { type: [string, 'null'] }
+                lastReviewedAt: { type: [string, 'null'] }
+                scope:
+                  type: object
+                  properties:
+                    category: { type: string }
+                    subcategory: { type: [string, 'null'] }
+                    productId: { type: integer }
+                seo:
+                  type: object
+                  properties:
+                    title: { type: [string, 'null'] }
+                    description: { type: [string, 'null'] }
+                sections:
+                  type: array
+                  items: {}
+                legacyItems:
+                  type: array
+                  items: {}
+    PublicCategory:
+      type: object
+      description: '`CatalogGroup::toApi()` — visible groups only'
+      required: [id, slug, title, description, imageUrl, productsCount]
+      properties:
+        id: { type: integer }
+        slug: { type: string, example: game-topup }
+        title: { type: string }
+        titleEn: { type: [string, 'null'], description: 'English name for search and SEO' }
+        seoTitle: { type: [string, 'null'] }
+        seoDescription: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        purchaseGuide: { type: [string, 'null'], description: 'Admin-managed purchase guide for this category; newlines preserved' }
+        imageUrl: { type: [string, 'null'] }
+        productsCount: { type: integer, description: 'Count of active+visible products' }
+    PageMeta:
+      type: object
+      required: [page, perPage, total, totalPages]
+      properties:
+        page: { type: integer, minimum: 1 }
+        perPage: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        totalPages: { type: integer, minimum: 1 }
+        platforms:
+          type: array
+          items: { type: string }
+          description: Distinct supplier platforms in the current result set (paginated catalog/admin lists)
+        regions:
+          type: array
+          items: { type: string }
+          description: Distinct supplier regions; Iran is omitted
+    PublicCategoryPage:
+      type: object
+      required: [category, products, meta]
+      properties:
+        category: { $ref: '#/components/schemas/PublicCategory' }
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/PublicProduct' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    PublicProductPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PublicProduct' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    HomeGroup:
+      type: object
+      required: [name, products]
+      properties:
+        id: { type: [integer, 'null'], description: 'catalog_groups.id; null only in the no-groups fallback' }
+        slug: { type: string, description: 'Unique URL slug for GET /catalog/categories/{slug}' }
+        name: { type: string, description: 'Storefront group title; generic game-topup label falls back to original name' }
+        description: { type: [string, 'null'] }
+        imageUrl: { type: [string, 'null'] }
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/PublicProduct' }
+    CatalogHome:
+      type: object
+      required: [banners, flashSale, groups, popular]
+      properties:
+        banners:
+          type: array
+          items: { $ref: '#/components/schemas/Banner' }
+        flashSale:
+          type: array
+          items: { $ref: '#/components/schemas/FlashSaleItem' }
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/HomeGroup' }
+        popular:
+          type: array
+          maxItems: 8
+          items: { $ref: '#/components/schemas/PublicProduct' }
+        flashSaleTitle: { type: string }
+        flashSaleSubtitle: { type: string }
+        flashSaleEndsAt: { type: [string, 'null'] }
+        popularTitle: { type: string }
+        popularSubtitle: { type: string }
+    AdminUserRow:
+      type: object
+      required: [id, name, email, phoneNumber, role, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        phoneNumber: { type: [string, 'null'] }
+        role: { type: string, enum: [admin, user] }
+        status: { type: string, description: 'default "active"; no other values are set anywhere in code' }
+        createdAt: { type: [string, 'null'], format: date-time }
+    AdminCategory:
+      type: object
+      description: '`CatalogGroup::toAdmin()`'
+      required: [id, shop2BigCategoryId, name, slug, title, nameEn, description, imageUrl, visible, source, synced, sortOrder, productsCount]
+      properties:
+        id: { type: integer }
+        shop2BigCategoryId: { type: [integer, 'null'] }
+        name: { type: string, description: 'supplier (English) name' }
+        slug: { type: string, description: 'Public URL slug' }
+        title: { type: string, description: 'Persian display title (editable)' }
+        nameEn: { type: [string, 'null'], description: 'English name for search and SEO' }
+        seoTitle: { type: [string, 'null'] }
+        seoDescription: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        purchaseGuide: { type: [string, 'null'], description: 'Purchase-guide modal copy; newlines preserved' }
+        imageUrl: { type: [string, 'null'] }
+        visible: { type: boolean }
+        source: { type: string, enum: [manual, shop2, fazercards] }
+        synced: { type: boolean, description: 'true when the group is linked to Shop2 or FazerCards' }
+        sortOrder: { type: integer }
+        productsCount: { type: integer }
+    AdminCategoryUpdateBody:
+      type: object
+      properties:
+        title: { type: string, maxLength: 120 }
+        nameEn: { type: [string, 'null'], maxLength: 160 }
+        slug: { type: string, maxLength: 80 }
+        description: { type: [string, 'null'], maxLength: 4000 }
+        seoTitle: { type: [string, 'null'], maxLength: 180 }
+        seoDescription: { type: [string, 'null'], maxLength: 300 }
+        purchaseGuide: { type: [string, 'null'], maxLength: 20000 }
+        imageUrl: { type: [string, 'null'], maxLength: 500 }
+        visible: { type: boolean }
+        sortOrder: { type: integer, minimum: 0 }
+    AdminSku:
+      type: object
+      description: '`Sku::toAdmin()`'
+      required: [id, productId, shop2ItemId, code, name, nameEn, fulfillmentType, price, priceManual, salePrice, saleEndsAt, saleActive, sellPrice, costUsd, liveCostUsd, purchaseUsd, purchaseToman, status, visible, sortOrder]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        shop2ItemId: { type: [integer, 'null'] }
+        code: { type: string }
+        name: { type: string }
+        nameEn: { type: [string, 'null'], description: 'English name for search and SEO' }
+        fulfillmentType: { type: [string, 'null'] }
+        price: { type: integer, description: Toman list price }
+        priceManual: { type: boolean }
+        marginPercent: { type: [string, 'null'], description: 'SKU profit-margin override; null inherits product then global' }
+        effectiveMarginPercent: { type: string, description: 'Resolved SKU > product > global margin' }
+        marginSource: { type: string, enum: [sku, product, global] }
+        salePrice: { type: [integer, 'null'] }
+        saleEndsAt: { type: [string, 'null'], format: date-time }
+        saleActive: { type: boolean }
+        sellPrice: { type: integer, description: 'Current payable Toman (sale when active)' }
+        costUsd: { type: [string, 'null'] }
+        liveCostUsd: { type: [string, 'null'] }
+        purchaseUsd: { type: string, description: 'Live supplier USD, else stored costUsd' }
+        purchaseToman: { type: integer, description: 'purchaseUsd × current USD/Toman rate, no sell margin' }
+        status: { $ref: '#/components/schemas/CatalogStatus' }
+        visible: { type: boolean }
+        sortOrder: { type: integer }
+        region: { type: [string, 'null'] }
+        minOrderQuantity: { type: integer, minimum: 1 }
+        maxOrderQuantity: { type: integer, minimum: 1, maximum: 100 }
+        giftSkuId: { type: [integer, 'null'], description: 'Gift-card SKU fulfilled instead of this package' }
+    AdminSkuUpdateBody:
+      type: object
+      properties:
+        name: { type: string, maxLength: 160 }
+        nameEn: { type: [string, 'null'], maxLength: 160 }
+        visible: { type: boolean }
+        status: { $ref: '#/components/schemas/CatalogStatus' }
+        price: { type: integer, minimum: 0, description: Locked sell price Toman (rounded to 1000); sets priceManual }
+        marginPercent: { type: [number, 'null'], minimum: 0, maximum: 100, description: 'Profit % for this package; null inherits product/global and unlocks formula pricing' }
+        salePrice: { type: [integer, 'null'], minimum: 0 }
+        saleEndsAt: { type: [string, 'null'], format: date }
+        costUsd: { type: string, description: 'Admin USD price; toman follows the shop rate when price is omitted' }
+        giftSkuId: { type: [integer, 'null'] }
+    AdminProduct:
+      type: object
+      description: '`Product::toAdmin()`'
+      required: [id, catalogGroupId, shop2CategoryId, shop2BigCategoryId, handle, code, title, nameEn, publisher, categoryName, subtitle, description, thumbnail, imageUrl, displayImage, isPopular, visible, fulfillmentType, status, sortOrder, source, skusCount, skus]
+      properties:
+        id: { type: integer }
+        catalogGroupId: { type: [integer, 'null'] }
+        shop2CategoryId: { type: [integer, 'null'] }
+        shop2BigCategoryId: { type: [integer, 'null'] }
+        fazercardsCategoryId: { type: [string, 'null'] }
+        handle: { type: string }
+        code: { type: string }
+        title: { type: string }
+        nameEn: { type: [string, 'null'] }
+        publisher: { type: string }
+        categoryName: { type: string }
+        subtitle: { type: string }
+        seoTitle: { type: [string, 'null'] }
+        seoDescription: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        thumbnail: { type: string }
+        imageUrl: { type: [string, 'null'] }
+        displayImage: { type: string }
+        isPopular: { type: boolean }
+        visible: { type: boolean }
+        fulfillmentType: { type: [string, 'null'] }
+        giftProxy: { type: boolean, description: 'Listed as itself; each package is fulfilled as a mapped gift card' }
+        marginPercent: { type: [string, 'null'], description: 'Product profit-margin override; null inherits global settings' }
+        globalMarginPercent: { type: string, description: 'Current shop-wide margin setting' }
+        platform: { type: [string, 'null'] }
+        region: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/CatalogStatus' }
+        sortOrder: { type: integer }
+        source: { type: string, enum: [manual, shop2, fazercards] }
+        skusCount: { type: integer }
+        skus:
+          type: array
+          description: 'Filled only on GET/PUT /admin/catalog/products/{product}; [] in the list endpoint.'
+          items: { $ref: '#/components/schemas/AdminSku' }
+    AdminProductUpdateBody:
+      type: object
+      properties:
+        title: { type: string, maxLength: 160 }
+        nameEn: { type: [string, 'null'], maxLength: 160, description: 'English name for search and SEO' }
+        subtitle: { type: [string, 'null'], maxLength: 160 }
+        seoTitle: { type: [string, 'null'], maxLength: 180 }
+        seoDescription: { type: [string, 'null'], maxLength: 300 }
+        description: { type: [string, 'null'], maxLength: 8000 }
+        publisher: { type: [string, 'null'], maxLength: 120 }
+        imageUrl: { type: [string, 'null'], maxLength: 500 }
+        isPopular: { type: boolean }
+        visible: { type: boolean }
+        status: { $ref: '#/components/schemas/CatalogStatus' }
+        sortOrder: { type: integer, minimum: 0 }
+        catalogGroupId: { type: [integer, 'null'] }
+        handle: { type: string, maxLength: 120 }
+        marginPercent: { type: [number, 'null'], minimum: 0, maximum: 100, description: 'Profit % for all packages without a SKU override' }
+        clearSkuMargins: { type: boolean, description: 'Clear per-SKU margin overrides so packages inherit this product (or global)' }
+        inputs:
+          type: array
+          items:
+            type: object
+    PricingSnapshot:
+      type: object
+      required: [usdTomanRate, marginPercent, fxMode, fxSource, fxUpdatedAt, sample]
+      properties:
+        usdTomanRate: { type: string, description: decimal string, example: '100000' }
+        marginPercent: { type: string, description: 'decimal string (default "5")', example: '5' }
+        fxMode: { type: string, enum: [auto, manual] }
+        fxSource: { type: [string, 'null'], description: 'e.g. manual, nobitex-usdtirt, tetherland-usdt' }
+        fxUpdatedAt: { type: [string, 'null'], format: date-time }
+        sample:
+          type: object
+          required: [usd, toman]
+          properties:
+            usd: { type: string, const: '1' }
+            toman: { type: integer }
+    PricingUpdateBody:
+      type: object
+      properties:
+        usdTomanRate: { type: [number, 'null'], minimum: 0 }
+        marginPercent: { type: [number, 'null'], minimum: 0, maximum: 100 }
+        fxMode: { type: [string, 'null'], enum: [auto, manual, null] }
+    FxRefreshResult:
+      allOf:
+        - $ref: '#/components/schemas/PricingSnapshot'
+        - type: object
+          required: [refreshed]
+          properties:
+            refreshed: { type: boolean }
+            repricedSkus: { type: integer }
+            reason: { type: string }
+    UploadResult:
+      type: object
+      required: [url, path]
+      properties:
+        url: { type: string, format: uri, description: 'absolute URL to /storage/{path}' }
+        path: { type: string, example: catalog/abc123.png }
+    SupplierAccount:
+      type: object
+      description: '`Shop2Adapter::account()` — no raw supplier payload'
+      required: [email, wallet, currency, active]
+      properties:
+        email: { type: string }
+        wallet: { type: string, description: 'USD decimal string' }
+        currency: { type: string, const: USD }
+        active: { type: boolean }
+    SupplierStatus:
+      type: object
+      required: [configured, liveOrderEnabled, host, seeds]
+      properties:
+        configured: { type: boolean }
+        liveOrderEnabled: { type: boolean }
+        host: { type: [string, 'null'], example: shop2topup.com }
+        seeds:
+          type: array
+          items: { type: string }
+          example: [SKU_PUBG_UC, SKU_COD_CP]
+        skuCount: { type: integer }
+        account: { $ref: '#/components/schemas/SupplierAccount' }
+        accountError: { type: string, description: 'Persian mapped supplier error' }
+        accountErrorCode: { type: string, example: IP_NOT_ALLOWED }
+    SkuMap:
+      type: object
+      properties:
+        provider: { type: string, const: shop2topup }
+        currency: { type: string, const: USD }
+        updatedAt: { type: [string, 'null'] }
+        skuCount: { type: integer }
+        skus:
+          type: array
+          items:
+            type: object
+            properties:
+              internal_code: { type: string }
+              game: { type: string, enum: [PUBG_MOBILE, COD_MOBILE] }
+              product_type: { type: string, enum: [UC, CP] }
+              denomination_label: { type: string }
+              category_id: { type: integer }
+              sub_category_id: { type: integer }
+              item_id: { type: integer }
+              unit_price_usd: { type: string }
+              requirements_schema_ref: { type: string }
+              requirement_keys:
+                type: array
+                items: { type: string }
+              test_status: { type: string }
+    SyncResult:
+      type: object
+      required: [account, groups, products, skus, pricing]
+      properties:
+        status: { type: string, enum: [running, completed, failed] }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        durationMs: { type: integer }
+        account:
+          type: object
+          required: [email, wallet]
+          properties:
+            email: { type: string }
+            wallet: { type: string }
+            currency: { type: string }
+            active: { type: boolean }
+        groups: { type: integer }
+        products: { type: integer }
+        skus: { type: integer }
+        pricing: { $ref: '#/components/schemas/PricingSnapshot' }
+    CatalogSyncStatus:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [idle, running, completed, failed] }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        durationMs: { type: integer }
+        groups: { type: integer }
+        products: { type: integer }
+        skus: { type: integer }
+        message: { type: string }
+        errorCode: { type: string }
+        account:
+          type: object
+          properties:
+            email: { type: string }
+            wallet: { type: string }
+            currency: { type: string }
+            active: { type: boolean }
+    AdminDashboardSummary:
+      type: object
+      required: [ordersToday, revenueTodayToman, pendingFulfillment, failedToday]
+      properties:
+        ordersToday: { type: integer }
+        revenueTodayToman: { type: integer }
+        pendingFulfillment: { type: integer }
+        failedToday: { type: integer }
+        supplierWallet: { type: [string, 'null'] }
+        supplierWalletLow: { type: boolean, description: 'true when wallet is not positive or INSUFFICIENT_BALANCE' }
+        accountError: { type: [string, 'null'], description: 'Persian mapped supplier error; never includes raw' }
+        accountErrorCode: { type: [string, 'null'] }

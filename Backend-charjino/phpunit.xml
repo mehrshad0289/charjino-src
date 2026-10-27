@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <env name="DB_CONNECTION" value="sqlite" force="true"/>
+        <env name="DB_DATABASE" value=":memory:" force="true"/>
+        <env name="TOROB_JWT_SKIP" value="false" force="true"/>
+        <env name="TOROB_JWT_AUD" value="api.charjino.ir" force="true"/>
+        <env name="TOROB_SHOP_BASE_URL" value="https://charjino.ir"/>
+        <env name="DB_URL" value=""/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SMART_SEARCH_DRIVER" value="database"/>
+        <env name="SMART_SEARCH_INDEX_PREFIX" value="charjino_test_"/>
+        <env name="SMART_SEARCH_QUEUE" value="search"/>
+        <env name="SMART_SEARCH_SCOUT_SYNC" value="false"/>
+        <env name="SMART_SEARCH_INDEX_WRITES" value="false" force="true"/>
+        <env name="SCOUT_DRIVER" value="null"/>
+        <env name="SCOUT_QUEUE" value="true"/>
+        <env name="SCOUT_QUEUE_NAME" value="search"/>
+        <env name="MEILISEARCH_HOST" value="http://127.0.0.1:7700"/>
+        <env name="MEILISEARCH_KEY" value="" force="true"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="APP_LOCALE" value="fa"/>
+        <env name="DEV_OTP_CODE" value="123456"/>
+        <env name="JWT_ACCESS_SECRET" value="charjino-test-access"/>
+        <env name="JWT_REFRESH_SECRET" value="charjino-test-refresh"/>
+        <env name="ADMIN_EMAIL" value="admin@charjino.local"/>
+        <env name="ADMIN_PASSWORD" value="charjino-admin"/>
+        <env name="S2T_KEY" value="" force="true"/>
+        <env name="PAYMENT_DRIVER" value="mock" force="true"/>
+        <env name="S2T_WEBHOOK_SECRET" value="test-webhook-secret" force="true"/>
+        <env name="FAZERCARDS_API_KEY" value="" force="true"/>
+        <env name="FAZERCARDS_ALLOW_LIVE_ORDER" value="false" force="true"/>
+        <env name="FAZERCARDS_WEBHOOK_SECRET" value="test-fc-webhook-secret" force="true"/>
+    </php>
+</phpunit>

@@ -1,0 +1,94 @@
+.viewport {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.viewport:active {
+  cursor: grabbing;
+}
+
+.drag {
+  display: flex;
+  width: max-content;
+  max-width: none;
+}
+
+.track {
+  display: flex;
+  width: max-content;
+  align-items: stretch;
+}
+
+.running {
+  animation-name: home-marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-duration: var(--marquee-duration, 24s);
+}
+
+.viewport:hover .running,
+.viewport:focus-within .running,
+.paused {
+  animation-play-state: paused;
+}
+
+.set {
+  display: flex;
+  flex-shrink: 0;
+  align-items: stretch;
+  gap: var(--marquee-gap, 12px);
+  min-height: var(--marquee-min-height, 0px);
+  padding-inline-end: var(--marquee-gap, 12px);
+}
+
+.set > * {
+  flex-shrink: 0;
+}
+
+.dup :global(a),
+.dup :global(button) {
+  pointer-events: none;
+}
+
+@keyframes home-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .running {
+    animation: none;
+  }
+
+  .dup {
+    display: none;
+  }
+
+  .viewport {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    touch-action: pan-x pan-y;
+    scrollbar-width: none;
+    cursor: auto;
+    user-select: auto;
+  }
+
+  .viewport::-webkit-scrollbar {
+    display: none;
+  }
+
+  .set > * {
+    scroll-snap-align: start;
+  }
+}

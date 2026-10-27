@@ -1,0 +1,9 @@
+{
+  "group": "telegram",
+  "stage": "stars",
+  "handle": "telegram-stars-stars",
+  "enable_allowed": false,
+  "product_ids": [55812],
+  "count": 1,
+  "note": "فقط ستاره تلگرام. قبل از enable باید prefix/brand اصلاح شود تا «تلگرام» تکرار نشود."
+}

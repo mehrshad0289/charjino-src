@@ -1,0 +1,23 @@
+{
+    "scope": "telegram-plus-service-topup",
+    "enable_allowed": false,
+    "product_ids": [
+        333,
+        335,
+        392,
+        426,
+        460,
+        461,
+        462,
+        530,
+        531,
+        532,
+        533,
+        534,
+        535,
+        536,
+        1511
+    ],
+    "count": 15,
+    "note": "Combined list because telegram+service-topup remaining <= 500 products"
+}

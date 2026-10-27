@@ -1,0 +1,43 @@
+{
+    "note": "پیشنهاد فقط؛ تا تأیید صاحب پروژه در config/torob_split_copy.php اعمال نشود.",
+    "proposals": {
+        "brands": {
+            "acash-my": "TODO: برند فارسی برای giftcard-acash-my",
+            "airalo-voucher": "TODO: برند فارسی برای giftcard-airalo-voucher",
+            "apex-legends-mobile-id": "TODO: برند فارسی برای giftcard-apex-legends-mobile-id",
+            "apex-legends-mobile-ph": "TODO: برند فارسی برای giftcard-apex-legends-mobile-ph",
+            "apex-legends-mobile-sg": "TODO: برند فارسی برای giftcard-apex-legends-mobile-sg",
+            "apex-legends-mobile-th": "TODO: برند فارسی برای giftcard-apex-legends-mobile-th",
+            "appota-vn": "TODO: برند فارسی برای giftcard-appota-vn",
+            "arena-breakout": "TODO: برند فارسی برای giftcard-arena-breakout",
+            "astropay-bd": "TODO: برند فارسی برای giftcard-astropay-bd",
+            "astropay-br": "TODO: برند فارسی برای giftcard-astropay-br",
+            "astropay-cn": "TODO: برند فارسی برای giftcard-astropay-cn",
+            "astropay-eg": "TODO: برند فارسی برای giftcard-astropay-eg",
+            "astropay-id": "TODO: برند فارسی برای giftcard-astropay-id",
+            "astropay-in": "TODO: برند فارسی برای giftcard-astropay-in",
+            "astropay-jp": "TODO: برند فارسی برای giftcard-astropay-jp",
+            "8-ball-pool": "TODO: برند فارسی برای topup-8-ball-pool",
+            "acecraft": "TODO: برند فارسی برای topup-acecraft",
+            "ace-racer": "TODO: برند فارسی برای topup-ace-racer",
+            "afk-journey": "TODO: برند فارسی برای topup-afk-journey",
+            "age-of-empire-mobile": "TODO: برند فارسی برای topup-age-of-empire-mobile",
+            "arena-breakout-infinite": "TODO: برند فارسی برای topup-arena-breakout-infinite",
+            "arena-of-valor-eu": "TODO: برند فارسی برای topup-arena-of-valor-eu",
+            "arena-of-valor-id": "TODO: برند فارسی برای topup-arena-of-valor-id",
+            "arena-of-valor-th": "TODO: برند فارسی برای topup-arena-of-valor-th",
+            "asphalt-9-legends": "TODO: برند فارسی برای topup-asphalt-9-legends",
+            "astral-guardians-cyber-fantasy": "TODO: برند فارسی برای topup-astral-guardians-cyber-fantasy",
+            "azur-lane": "TODO: برند فارسی برای topup-azur-lane",
+            "badlanders": "TODO: برند فارسی برای topup-badlanders",
+            "ballistic-hero-vng": "TODO: برند فارسی برای topup-ballistic-hero-vng",
+            "grand-theft-auto-v-global": "TODO: برند فارسی برای gamekey-grand-theft-auto-v-global",
+            "red-dead-redemption-2-global": "TODO: برند فارسی برای gamekey-red-dead-redemption-2-global",
+            "the-simstm-4-global-ea": "TODO: برند فارسی برای gamekey-the-simstm-4-global-ea"
+        },
+        "brand_units": [],
+        "groups": [],
+        "currencies": [],
+        "regions": []
+    }
+}

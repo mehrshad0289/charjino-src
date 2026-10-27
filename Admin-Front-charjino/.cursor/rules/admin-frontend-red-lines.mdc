@@ -1,0 +1,25 @@
+---
+description: خط قرمز پنل ادمین شارژینو — ظاهر و معماری فقط از این ریپو
+globs: Admin-Front-charjino/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# پنل ادمین شارژینو
+
+فقط مسیرهای این ریپو. **Boomobana / بوم‌بنا ممنوع.**
+
+## ظاهر
+
+توکن تیره از `ui ux مورد نظر`. `lang="fa"` `dir="rtl"`. ظاهر لایت معماری برچسب را کپی نکن.
+
+## معماری
+
+الگوی کد از `از این استفاده کن معماری charjino کد`: App Router، `src/components/ui` + `styles.ts`، Server Actions، `serverFetch`، کوکی httpOnly، Formik/Yup.
+
+```text
+Admin-Front-charjino → :3002
+Frontend-charjino  → :3001
+Backend-charjino   → :3000/api
+```
+
+`BACKEND_URL` بدون `NEXT_PUBLIC_`. مسیرها فقط از OpenAPI as-built (`Backend-charjino/docs/openapi.yaml`). دادهٔ جعلی سفارش (`RECENT_ORDERS`) در مسیر اصلی ممنوع.

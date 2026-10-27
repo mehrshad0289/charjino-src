@@ -1,0 +1,82 @@
+export const FORM_ELEMENTS_COPY = {
+  pageTitle: 'عناصر فرم',
+  defaultInputs: 'ورودی‌های پیش‌فرض',
+  input: 'ورودی',
+  inputPlaceholder: 'ورودی معمولی',
+  inputWithPlaceholder: 'ورودی با نگهدارنده',
+  emailPlaceholder: 'info@gmail.com',
+  selectInput: 'ورودی انتخاب',
+  selectPlaceholder: 'یک گزینه را انتخاب کنید',
+  password: 'ورودی رمز عبور',
+  passwordPlaceholder: 'رمز عبور را وارد کنید',
+  datePicker: 'انتخاب تاریخ',
+  datePlaceholder: 'تاریخ را انتخاب کنید',
+  timePicker: 'انتخاب ساعت',
+  payment: 'ورودی کارت',
+  cardPlaceholder: 'شماره کارت',
+  selectInputs: 'ورودی‌های انتخاب',
+  multiSelect: 'انتخاب چندتایی',
+  multiPlaceholder: 'گزینه‌ها را انتخاب کنید',
+  option: 'گزینه',
+  marketing: 'بازاریابی',
+  template: 'قالب',
+  development: 'توسعه',
+  textareaTitle: 'فیلد متن بلند',
+  description: 'توضیحات',
+  textareaPlaceholder: 'پیام خود را وارد کنید',
+  textareaHint: 'یک پیام معتبر وارد کنید.',
+  inputStates: 'وضعیت ورودی',
+  inputStatesDesc: 'استایل اعتبارسنجی برای خطا، موفقیت و غیرفعال روی کنترل‌های فرم.',
+  email: 'ایمیل',
+  emailHintError: 'این ایمیل نامعتبر است.',
+  emailHintSuccess: 'این پیام موفقیت است.',
+  disabledEmail: 'disabled@example.com',
+  inputGroup: 'گروه ورودی',
+  phone: 'تلفن',
+  website: 'وب‌سایت',
+  url: 'آدرس',
+  fileInput: 'ورودی فایل',
+  uploadFile: 'بارگذاری فایل',
+  checkbox: 'چک‌باکس',
+  default: 'پیش‌فرض',
+  checked: 'انتخاب‌شده',
+  disabled: 'غیرفعال',
+  radios: 'دکمه‌های رادیو',
+  selected: 'انتخاب‌شده',
+  toggle: 'سوییچ',
+  dropzone: 'دراپ‌زون',
+  dropHere: 'فایل‌ها را اینجا رها کنید',
+  dropImages: 'تصاویر را اینجا رها کنید',
+  dragDrop: 'فایل‌ها را بکشید و رها کنید',
+  unsupported: 'نوع فایل پشتیبانی نمی‌شود',
+  dropHint: 'تصاویر PNG، JPG، WebP یا SVG را بکشید یا انتخاب کنید',
+  dropRejectHint: 'فقط تصاویر PNG، JPG، WebP و SVG تا ۵ مگابایت مجاز است',
+  browse: 'انتخاب فایل',
+  uploaded: 'تصاویر بارگذاری‌شده',
+  clearAll: 'پاک کردن همه',
+  preview: 'پیش‌نمایش تصویر',
+  copy: 'کپی',
+  copied: 'کپی شد',
+  urlPlaceholder: 'www.boomobana.ir'
+} as const;
+
+export const FORM_SELECT_OPTIONS = [
+  { value: 'marketing', label: FORM_ELEMENTS_COPY.marketing },
+  { value: 'template', label: FORM_ELEMENTS_COPY.template },
+  { value: 'development', label: FORM_ELEMENTS_COPY.development }
+];
+
+export const FORM_MULTI_OPTIONS = [
+  { value: '1', text: `${FORM_ELEMENTS_COPY.option} ۱` },
+  { value: '2', text: `${FORM_ELEMENTS_COPY.option} ۲` },
+  { value: '3', text: `${FORM_ELEMENTS_COPY.option} ۳` },
+  { value: '4', text: `${FORM_ELEMENTS_COPY.option} ۴` },
+  { value: '5', text: `${FORM_ELEMENTS_COPY.option} ۵` }
+];
+
+export const FORM_PHONE_COUNTRIES = [
+  { code: 'IR', label: '+۹۸' },
+  { code: 'US', label: '+1' },
+  { code: 'GB', label: '+44' },
+  { code: 'TR', label: '+90' }
+];

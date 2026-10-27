@@ -1,0 +1,9 @@
+{
+  "group": "telegram",
+  "stage": "premium",
+  "handle": "telegram-premium-premium",
+  "enable_allowed": false,
+  "product_ids": [55813],
+  "count": 1,
+  "note": "هرگز با نگاشت فعلی فعال نشود: واحد brand_units.telegram=ستاره روی پرمیوم ماهانه اعمال می‌شود."
+}

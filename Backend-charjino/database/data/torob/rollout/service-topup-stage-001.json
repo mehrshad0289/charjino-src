@@ -1,0 +1,28 @@
+{
+    "scope": "service-topup",
+    "label": "Service top-up",
+    "stage": 1,
+    "enable_allowed": false,
+    "product_ids": [
+        333,
+        335,
+        392,
+        426,
+        460,
+        461,
+        462,
+        530,
+        531,
+        532,
+        533,
+        534,
+        535,
+        536,
+        1511
+    ],
+    "count": 15,
+    "projected_extra_rows": 83,
+    "projected_global_ratio_vs_stored_baseline": 1.0135,
+    "under_global_1_5_cap": true,
+    "note": "dry-run rollout file; do not enable without owner approval"
+}

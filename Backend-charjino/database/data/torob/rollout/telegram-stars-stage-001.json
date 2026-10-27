@@ -1,0 +1,14 @@
+{
+    "scope": "telegram-stars",
+    "label": "Telegram Stars",
+    "stage": 1,
+    "enable_allowed": false,
+    "product_ids": [
+        55812
+    ],
+    "count": 1,
+    "projected_extra_rows": 11,
+    "projected_global_ratio_vs_stored_baseline": 1.0118,
+    "under_global_1_5_cap": true,
+    "note": "dry-run rollout file; do not enable without owner approval"
+}

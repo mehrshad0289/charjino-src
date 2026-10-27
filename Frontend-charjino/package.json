@@ -1,0 +1,54 @@
+{
+  "name": "frontend-charjino",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/free-port.mjs",
+    "dev": "next dev -p 3001",
+    "build": "next build && node scripts/check-lorem.mjs && node scripts/check-blog-links.mjs && node --experimental-strip-types --import ./scripts/ts-test-loader.mjs scripts/check-h1.mjs",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "check:sitemap": "node scripts/check-sitemap.mjs",
+    "check:brand": "node scripts/check-brand.mjs",
+    "api:types": "openapi-typescript ../Backend-charjino/docs/openapi.yaml -o src/types/api.gen.ts"
+  },
+  "dependencies": {
+    "@next/third-parties": "^16.3.1",
+    "cheerio": "^1.2.0",
+    "date-fns": "^4.4.0",
+    "date-fns-jalali": "^4.4.0-0",
+    "formik": "^2.4.9",
+    "html-react-parser": "^6.1.8",
+    "iconsax-react": "^0.0.8",
+    "isomorphic-dompurify": "^3.19.0",
+    "next": "16.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "schema-dts": "^2.1.0",
+    "sonner": "^2.0.8",
+    "swiper": "^14.1.0",
+    "yup": "^1.7.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.1",
+    "openapi-typescript": "^7.10.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5"
+  },
+  "browserslist": [
+    "chrome >= 111",
+    "firefox >= 111",
+    "safari >= 16.4",
+    "edge >= 111",
+    "not dead",
+    "not op_mini all",
+    "not ie 11"
+  ]
+}

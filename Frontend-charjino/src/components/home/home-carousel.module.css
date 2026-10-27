@@ -1,0 +1,71 @@
+.wrap {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.swiper {
+  width: 100%;
+  padding-top: 12px;
+  padding-bottom: 0;
+}
+
+.swiper :global(.swiper-slide) {
+  width: 220px;
+  height: auto;
+  background-position: center;
+  background-size: cover;
+}
+
+.swiper :global(.swiper-slide) img,
+.swiper :global(.swiper-slide) video {
+  display: block;
+  width: 100%;
+}
+.swiper :global(.swiper-slide) > * {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.swiper :global(.swiper-slide:not(.swiper-slide-active):not(.swiper-slide-duplicate-active)) > * {
+  transform: rotateX(5deg) ;
+  transform-origin: ceter;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 7px;
+}
+
+.pagination :global(.swiper-pagination-bullet) {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  margin: 0 !important;
+  background: var(--color-text);
+  opacity: 0.22;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    width 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.35s ease,
+    background 0.35s ease;
+}
+
+.pagination :global(.swiper-pagination-bullet)::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+}
+
+.pagination :global(.swiper-pagination-bullet-active) {
+  width: 26px;
+  opacity: 1;
+}
+
+@media (min-width: 768px) {
+  .swiper :global(.swiper-slide) {
+    width: 300px;
+  }
+}

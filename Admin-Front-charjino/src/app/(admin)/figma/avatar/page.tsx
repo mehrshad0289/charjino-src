@@ -1,0 +1,63 @@
+import { Avatar } from '@/components/ui/avatar';
+import { ComponentCard } from '@/components/ui/component-card';
+import { PageBreadcrumb } from '@/components/ui/page-breadcrumb';
+
+export default function AvatarPage() {
+  return (
+    <div>
+      <PageBreadcrumb pageTitle='آواتار' />
+      <div className='space-y-5 sm:space-y-6'>
+        <ComponentCard title='آواتار پیش‌فرض'>
+          <div className='flex flex-col items-center justify-center gap-5 sm:flex-row'>
+            <Avatar src='/images/user/user-01.jpg' size='xsmall' />
+            <Avatar src='/images/user/user-01.jpg' size='small' />
+            <Avatar src='/images/user/user-01.jpg' size='medium' />
+            <Avatar src='/images/user/user-01.jpg' size='large' />
+            <Avatar src='/images/user/user-01.jpg' size='xlarge' />
+            <Avatar src='/images/user/user-01.jpg' size='xxlarge' />
+          </div>
+        </ComponentCard>
+        <ComponentCard title='گروه آواتار'>
+          <div className='flex items-center justify-center'>
+            <Avatar src='/images/user/user-01.jpg' size='xlarge' className='-ms-4 ring-2 ring-white first:ms-0 dark:ring-gray-900' />
+            <Avatar src='/images/user/user-02.jpg' size='xlarge' className='-ms-4 ring-2 ring-white first:ms-0 dark:ring-gray-900' />
+            <Avatar src='/images/user/user-03.jpg' size='xlarge' className='-ms-4 ring-2 ring-white first:ms-0 dark:ring-gray-900' />
+            <Avatar src='/images/user/user-04.jpg' size='xlarge' className='-ms-4 ring-2 ring-white first:ms-0 dark:ring-gray-900' />
+            <Avatar src='/images/user/user-05.jpg' size='xlarge' className='-ms-4 ring-2 ring-white first:ms-0 dark:ring-gray-900' />
+            <Avatar src='/images/user/user-06.jpg' size='xlarge' className='-ms-4 ring-2 ring-white first:ms-0 dark:ring-gray-900' />
+          </div>
+        </ComponentCard>
+        <ComponentCard title='آواتار با وضعیت آنلاین'>
+          <div className='flex flex-col items-center justify-center gap-5 sm:flex-row'>
+            <Avatar src='/images/user/user-01.jpg' size='xsmall' status='online' />
+            <Avatar src='/images/user/user-01.jpg' size='small' status='online' />
+            <Avatar src='/images/user/user-01.jpg' size='medium' status='online' />
+            <Avatar src='/images/user/user-01.jpg' size='large' status='online' />
+            <Avatar src='/images/user/user-01.jpg' size='xlarge' status='online' />
+            <Avatar src='/images/user/user-01.jpg' size='xxlarge' status='online' />
+          </div>
+        </ComponentCard>
+        <ComponentCard title='آواتار با وضعیت آفلاین'>
+          <div className='flex flex-col items-center justify-center gap-5 sm:flex-row'>
+            <Avatar src='/images/user/user-01.jpg' size='xsmall' status='offline' />
+            <Avatar src='/images/user/user-01.jpg' size='small' status='offline' />
+            <Avatar src='/images/user/user-01.jpg' size='medium' status='offline' />
+            <Avatar src='/images/user/user-01.jpg' size='large' status='offline' />
+            <Avatar src='/images/user/user-01.jpg' size='xlarge' status='offline' />
+            <Avatar src='/images/user/user-01.jpg' size='xxlarge' status='offline' />
+          </div>
+        </ComponentCard>
+        <ComponentCard title='آواتار با وضعیت مشغول'>
+          <div className='flex flex-col items-center justify-center gap-5 sm:flex-row'>
+            <Avatar src='/images/user/user-01.jpg' size='xsmall' status='busy' />
+            <Avatar src='/images/user/user-01.jpg' size='small' status='busy' />
+            <Avatar src='/images/user/user-01.jpg' size='medium' status='busy' />
+            <Avatar src='/images/user/user-01.jpg' size='large' status='busy' />
+            <Avatar src='/images/user/user-01.jpg' size='xlarge' status='busy' />
+            <Avatar src='/images/user/user-01.jpg' size='xxlarge' status='busy' />
+          </div>
+        </ComponentCard>
+      </div>
+    </div>
+  );
+}

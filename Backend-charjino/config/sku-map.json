@@ -1,0 +1,59 @@
+{
+    "provider": "shop2topup",
+    "currency": "USD",
+    "updated_at": "2026-09-26T20:27:06+03:30",
+    "skus": [
+        {
+            "internal_code": "SKU_PUBG_UC_10",
+            "game": "PUBG_MOBILE",
+            "product_type": "UC",
+            "denomination_label": "10 UC",
+            "category_id": 2,
+            "sub_category_id": 12,
+            "item_id": 12,
+            "unit_price_usd": "0.312096",
+            "requirements_schema_ref": "category:2",
+            "requirement_keys": ["player_id"],
+            "test_status": "pending"
+        },
+        {
+            "internal_code": "SKU_PUBG_UC_30000",
+            "game": "PUBG_MOBILE",
+            "product_type": "UC",
+            "denomination_label": "30,000 + 10,500 UC",
+            "category_id": 2,
+            "sub_category_id": 22,
+            "item_id": 22,
+            "unit_price_usd": "445.851",
+            "requirements_schema_ref": "category:2",
+            "requirement_keys": ["player_id"],
+            "test_status": "pending"
+        },
+        {
+            "internal_code": "SKU_COD_CP_160",
+            "game": "COD_MOBILE",
+            "product_type": "CP",
+            "denomination_label": "160 CP",
+            "category_id": 467,
+            "sub_category_id": 1002,
+            "item_id": 1002,
+            "unit_price_usd": "1.962144",
+            "requirements_schema_ref": "category:467",
+            "requirement_keys": ["player_id"],
+            "test_status": "pending"
+        },
+        {
+            "internal_code": "SKU_COD_CP_4800",
+            "game": "COD_MOBILE",
+            "product_type": "CP",
+            "denomination_label": "4,800 CP",
+            "category_id": 467,
+            "sub_category_id": 1015,
+            "item_id": 1015,
+            "unit_price_usd": "58.86432",
+            "requirements_schema_ref": "category:467",
+            "requirement_keys": ["player_id"],
+            "test_status": "pending"
+        }
+    ]
+}

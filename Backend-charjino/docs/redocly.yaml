@@ -1,0 +1,7 @@
+# Lint config for openapi.yaml
+extends:
+  - recommended
+rules:
+  # Public read-only endpoints (/health, /platform/policy, /catalog/home, /catalog/products, /, /up)
+  # have no documented 4xx in the code; do not invent one just to satisfy the linter.
+  operation-4xx-response: off

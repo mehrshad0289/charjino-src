@@ -1,0 +1,313 @@
+--- orig/TorobFeedCatalogCopy.php	2026-10-27 00:17:04.719126370 +0330
++++ patched/TorobFeedCatalogCopy.php	2026-10-27 00:19:03.234719999 +0330
+@@ -79,7 +79,7 @@
+         }
+ 
+         if (preg_match(self::SHOP_PREFIX_PATTERN, $title) === 1) {
+-            return $title;
++            return $slug === 'game-topup' ? $this->appendTopupVariant($product, $title) : $title;
+         }
+ 
+         $prefix = self::GROUP_TITLE_PREFIX[$slug] ?? null;
+@@ -88,8 +88,33 @@
+         }
+ 
+         $body = $this->stripGroupLeadPrefix($prefix, $title);
++        $joined = $this->joinPrefix($prefix, $body);
++        if ($slug === 'game-keys') {
++            $joined = $this->appendGameKeyEdition($product, $joined);
++        }
++        if ($slug === 'game-topup') {
++            $joined = $this->appendTopupVariant($product, $joined);
++        }
+ 
+-        return $this->joinPrefix($prefix, $body);
++        return $joined;
++    }
++
++    /**
++     * «کلید بازی DayZ» for gamekey-dayz-cis → «کلید بازی DayZ نسخه سی‌آی‌اس». Labels come only from
++     * config torob_split_copy.game_key_edition_labels; unmapped suffix → title unchanged.
++     */
++    private function appendGameKeyEdition(Product $product, string $title): string
++    {
++        $handle = mb_strtolower(trim((string) $product->handle));
++        $labels = $this->stringMap('game_key_edition_labels');
++        uksort($labels, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
++        foreach ($labels as $suffix => $label) {
++            if (str_ends_with($handle, '-'.mb_strtolower($suffix))) {
++                return $this->containsNormalized($title, $label) ? $title : $this->normalizeSpaces($title.' '.$label);
++            }
++        }
++
++        return $title;
+     }
+ 
+     public function torobSubtitle(Product $product): ?string
+@@ -258,23 +283,25 @@
+     }
+ 
+     /**
+-     * @return array{amount: int, currency: string}|null
++     * Amount is kept as the exact decimal string from supplier data (e.g. "10.37"), never truncated.
++     *
++     * @return array{amount: string, currency: string}|null
+      */
+     private function skuAmount(Sku $sku): ?array
+     {
+         $offer = trim((string) $sku->fazercards_offer_id);
+-        if (preg_match('/^(\d+)_([a-z]{3})$/i', $offer, $matches) === 1) {
+-            $amount = (int) $matches[1];
+-            if ($amount > 0) {
++        if (preg_match('/^(\d+(?:\.\d+)?)_([a-z]{3})$/i', $offer, $matches) === 1) {
++            $amount = $this->canonicalAmount($matches[1]);
++            if ($amount !== null) {
+                 return ['amount' => $amount, 'currency' => strtoupper($matches[2])];
+             }
+         }
+         $codes = $this->currencyPattern();
+         $aliases = implode('|', array_map(static fn (string $token): string => preg_quote($token, '/'), array_keys($this->stringMap('currency_aliases'))));
+         $unitPart = $codes.($aliases !== '' ? '|'.$aliases : '');
+-        if (preg_match('/(\d+)\s*('.$unitPart.')/iu', (string) $sku->name, $matches) === 1) {
+-            $amount = (int) $matches[1];
+-            if ($amount > 0) {
++        if (preg_match('/(?<![\d.,])(\d+(?:[.,]\d+)?)\s*('.$unitPart.')/iu', (string) $sku->name, $matches) === 1) {
++            $amount = $this->canonicalAmount($matches[1]);
++            if ($amount !== null) {
+                 return ['amount' => $amount, 'currency' => $this->normalizeCurrencyToken($matches[2])];
+             }
+         }
+@@ -282,6 +309,26 @@
+         return null;
+     }
+ 
++    /**
++     * "10.37" stays "10.37"; "1,166" (thousands) becomes "1166"; a comma that is not a
++     * thousands separator is ambiguous, so the SKU is not split (null).
++     */
++    private function canonicalAmount(string $raw): ?string
++    {
++        $raw = trim($raw);
++        if (preg_match('/^\d{1,3}(?:,\d{3})+$/', $raw) === 1) {
++            $raw = str_replace(',', '', $raw);
++        } elseif (str_contains($raw, ',')) {
++            return null;
++        }
++        if (preg_match('/^\d+(?:\.\d+)?$/', $raw) !== 1 || (float) $raw <= 0) {
++            return null;
++        }
++        $raw = ltrim($raw, '0');
++
++        return $raw === '' || $raw[0] === '.' ? '0'.$raw : $raw;
++    }
++
+     public function brandNeedle(Product $product): ?string
+     {
+         return $this->matchingBrandNeedle($product);
+@@ -298,6 +345,13 @@
+     {
+         $handle = mb_strtolower(trim((string) $product->handle));
+         $platform = mb_strtolower(trim((string) ($product->platform ?? '')));
++        $excluded = config('torob_split_copy.brand_excluded_handle_fragments', []);
++        foreach (is_array($excluded) ? $excluded : [] as $fragment) {
++            $fragment = mb_strtolower(trim((string) $fragment));
++            if ($fragment !== '' && str_contains($handle, $fragment)) {
++                return null;
++            }
++        }
+         $needles = array_keys($this->stringMap('brands'));
+         usort($needles, static fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
+         foreach ($needles as $needle) {
+@@ -410,11 +464,8 @@
+     private function persianTopupTitle(array $spec, string $brand, Product $product, Sku $sku): ?string
+     {
+         $name = trim((string) $sku->name);
+-        if (preg_match('/(\d+)/u', $name, $matches) !== 1) {
+-            return null;
+-        }
+-        $amount = (int) $matches[1];
+-        if ($amount < 1) {
++        $amountText = $this->topupAmountText($name, $this->topupUnit($product, $name));
++        if ($amountText === null) {
+             return null;
+         }
+         $unit = $this->topupUnit($product, $name);
+@@ -425,11 +476,94 @@
+         $lead = $this->prefixAlreadyHasBrand($prefix, $brand)
+             ? $prefix
+             : $this->normalizeSpaces($prefix.' '.$brand);
+-        $title = $this->normalizeSpaces($lead.' '.$amount.' '.$unit);
++        $parts = [$lead, $amountText, $unit];
++        $variant = $this->topupVariantLabel($product);
++        if ($variant !== null) {
++            $parts[] = $variant;
++        }
++        $regionCode = $this->topupRegionCode($product);
++        if ($regionCode === false) {
++            return null;
++        }
++        $title = $this->normalizeSpaces(implode(' ', $parts));
++        if ($regionCode !== null) {
++            $title = $this->normalizeSpaces($title.' '.$this->stringMap('regions')[$regionCode]).' ('.strtoupper($regionCode).')';
++        }
+ 
+         return $this->assertCompletePersianTitle($title);
+     }
+ 
++    /**
++     * "80 + 8 CP" → "80 + 8"; "500 Diamonds" → "500". Anything else in the name (packs, passes,
++     * "(First Top-Up Bonus)") is not representable without a config mapping → not split.
++     */
++    private function topupAmountText(string $name, ?string $persianUnit = null): ?string
++    {
++        $unitAliases = array_keys($this->stringMap('unit_aliases'));
++        if ($persianUnit !== null && $persianUnit !== '') {
++            $unitAliases[] = $persianUnit;
++        }
++        usort($unitAliases, static fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
++        $units = implode('|', array_map(static fn (string $u): string => preg_quote($u, '/'), $unitAliases));
++        if ($units === '') {
++            return null;
++        }
++        if (preg_match('/^\s*(\d+)\s*\+\s*(\d+)\s*(?:'.$units.')\s*$/iu', $name, $m) === 1) {
++            return ((int) $m[1] > 0 && (int) $m[2] > 0) ? ((int) $m[1]).' + '.((int) $m[2]) : null;
++        }
++        if (preg_match('/^\s*(\d+)\s*(?:'.$units.')\s*$/iu', $name, $m) === 1) {
++            return (int) $m[1] > 0 ? (string) (int) $m[1] : null;
++        }
++
++        return null;
++    }
++
++    /**
++     * Handle suffix such as -fast/-manual/-reserve → label from config topup_variant_suffixes.
++     */
++    private function appendTopupVariant(Product $product, string $title): string
++    {
++        $variant = $this->topupVariantLabel($product);
++
++        return ($variant === null || $this->containsNormalized($title, $variant))
++            ? $title
++            : $this->normalizeSpaces($title.' '.$variant);
++    }
++
++    private function topupVariantLabel(Product $product): ?string
++    {
++        $handle = mb_strtolower(trim((string) $product->handle));
++        foreach ($this->stringMap('topup_variant_suffixes') as $suffix => $label) {
++            if (str_ends_with($handle, '-'.mb_strtolower($suffix))) {
++                return $label;
++            }
++        }
++
++        return null;
++    }
++
++    /**
++     * Region from the handle suffix (e.g. topup-valorant-my). Unknown suffix that is listed in
++     * topup_region_handle_brands but not in regions → false (do not split).
++     */
++    private function topupRegionCode(Product $product): string|false|null
++    {
++        $needle = $this->matchingBrandNeedle($product);
++        $brands = config('torob_split_copy.topup_region_handle_brands', []);
++        if ($needle === null || ! is_array($brands) || ! in_array($needle, $brands, true)) {
++            return null;
++        }
++        $handle = mb_strtolower(trim((string) $product->handle));
++        $pos = strpos($handle, $needle.'-');
++        if ($pos === false) {
++            return null;
++        }
++        // Whole remainder after the brand must be ONE region code: "my-sg", "latam" etc. → false.
++        $code = $this->normalizeRegionCode(substr($handle, $pos + strlen($needle) + 1));
++
++        return isset($this->stringMap('regions')[$code]) ? $code : false;
++    }
++
+     private function prefixAlreadyHasBrand(string $prefix, string $brand): bool
+     {
+         $prefixKey = $this->normalizeTitleKey($prefix);
+@@ -459,7 +593,11 @@
+     {
+         $title = $this->normalizeSpaces($title);
+         $body = preg_replace('/\s*\([A-Z]{2,8}\)$/', '', $title) ?? $title;
+-        if (preg_match('/^[\p{Arabic}0-9\s\x{200C}\x{200D}]+$/u', $body) !== 1) {
++        if (preg_match('/^[\p{Arabic}0-9\s\x{200C}\x{200D}.+]+$/u', $body) !== 1) {
++            return null;
++        }
++        // "." only inside a number, "+" only between two numbers.
++        if (preg_match('/(?<!\d)\.|\.(?!\d)/u', $body) === 1 || preg_match('/(?<!\d )\+|\+(?! \d)/u', $body) === 1) {
+             return null;
+         }
+ 
+@@ -512,8 +650,11 @@
+     public function skuNumericAmount(Sku $sku): ?int
+     {
+         $parsed = $this->skuAmount($sku);
++        if ($parsed === null || ! ctype_digit($parsed['amount'])) {
++            return null;
++        }
+ 
+-        return $parsed['amount'] ?? null;
++        return (int) $parsed['amount'];
+     }
+ 
+     private function insertAmountIntoTitle(string $base, int $amount): string
+--- orig/torob_split_copy.php	2026-10-27 00:17:04.719126370 +0330
++++ patched/torob_split_copy.php	2026-10-27 00:19:10.870694276 +0330
+@@ -141,9 +141,18 @@
+         'pe' => 'پرو',
+         'uy' => 'اروگوئه',
+         'bd' => 'بنگلادش',
++        // proposed (needs owner approval of the Persian name)
++        'kh' => 'کامبوج',
+     ],
+     'region_aliases' => [
+         'usa' => 'us',
++        'united-states' => 'us',
++        'brazil' => 'br',
++        'indonesia' => 'id',
++        'malaysia' => 'my',
++        'philippines' => 'ph',
++        'singapore' => 'sg',
++        'turkey' => 'tr',
+         'gb' => 'uk',
+         'eur' => 'eu',
+         'uae' => 'ae',
+@@ -222,4 +231,35 @@
+         'stars' => 'ستاره',
+         'star' => 'ستاره',
+     ],
++    // Handles containing these fragments never get a brand (prevents 'discord' matching
++    // Legacy of Discord and 'mobile-legends' matching Mobile Legends: Adventure / M-CASH).
++    'brand_excluded_handle_fragments' => [
++        'legacy-of-discord',
++        'mobile-legends-adventure',
++    ],
++    // Topup brands whose handle suffix is a region (topup-valorant-my → «... مالزی (MY)»).
++    'topup_region_handle_brands' => ['valorant', 'free-fire', 'mobile-legends'],
++    // Full-word handle suffixes → region code (only used via region_aliases). "exclusive"/"special"
++    // are NOT regions → those products stay unsplit until the owner decides.
++    // Topup handle suffix → Persian delivery-variant label (PROPOSED wording; owner decision).
++    'topup_variant_suffixes' => [
++        'fast' => 'تحویل سریع',
++        'manual' => 'تحویل دستی',
++        'reserve' => 'تحویل رزرو',
++    ],
++    // Game-key handle suffix → edition label appended to the live title (PROPOSED; owner decision).
++    'game_key_edition_labels' => [
++        'global' => 'نسخه گلوبال',
++        'row' => 'نسخه بین‌المللی',
++        'cis' => 'نسخه سی‌آی‌اس',
++        'latam' => 'نسخه آمریکای لاتین',
++        'eu' => 'نسخه اروپا',
++        'us' => 'نسخه آمریکا',
++        'uk' => 'نسخه انگلیس',
++        'tr' => 'نسخه ترکیه',
++        'in' => 'نسخه هند',
++        'asia' => 'نسخه آسیا',
++        'mena' => 'نسخه خاورمیانه',
++        'ru' => 'نسخه روسیه',
++    ],
+ ];

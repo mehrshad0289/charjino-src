@@ -1,0 +1,31 @@
+{
+    "scope": "gift-card-remaining",
+    "label": "Gift cards (remaining)",
+    "stage": 2,
+    "enable_allowed": false,
+    "product_ids": [
+        1056,
+        1057,
+        1067,
+        1113,
+        1114,
+        1116,
+        1117,
+        1118,
+        1120,
+        1123,
+        1124,
+        1126,
+        1127,
+        1128,
+        1129,
+        1130,
+        1131,
+        56491
+    ],
+    "count": 18,
+    "projected_extra_rows": 72,
+    "projected_global_ratio_vs_stored_baseline": 1.0432,
+    "under_global_1_5_cap": true,
+    "note": "dry-run rollout file; do not enable without owner approval"
+}
